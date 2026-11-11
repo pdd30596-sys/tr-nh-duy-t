@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 2
-                  versionName "1.1"
+                  versionCode 3
+                  versionName "1.2"
               }
 
               signingConfigs {
@@ -587,7 +587,7 @@ jobs:
                       nm.createNotificationChannel(NotificationChannel("dl", "Tải video", NotificationManager.IMPORTANCE_LOW))
                       return Notification.Builder(ctx, "dl")
                           .setSmallIcon(android.R.drawable.stat_sys_download)
-                          .setContentTitle("Trình duyệt đang tải $count video")
+                          .setContentTitle("Trình Duyệt đang tải $count video")
                           .setOngoing(true)
                           .setProgress(100, avg, indeterminate)
                           .build()
@@ -665,6 +665,8 @@ jobs:
               var blocked = 0
               var thumb: Bitmap? = null
               var progress = 100
+              var popups = 0
+              @Volatile var lastTouch = 0L
           }
 
           class MainActivity : Activity() {
@@ -677,6 +679,7 @@ jobs:
               private lateinit var backIcon: IconView
               private lateinit var fwdIcon: IconView
               private lateinit var homeIcon: IconView
+              private lateinit var starIcon: IconView
               private lateinit var tabsIcon: IconView
               private lateinit var bubble: Bubble
               private var bubbleAnim: ObjectAnimator? = null
@@ -694,6 +697,10 @@ jobs:
               @Volatile private var adLevel = 1
               @Volatile private var exc: Set<String> = emptySet()
               @Volatile private var blockedTotal = 0
+              @Volatile private var popupBlock = true
+              @Volatile private var popExc: Set<String> = emptySet()
+              private var lastWindowTs = 0L
+              private var pill: TextView? = null
               private var fx3d = true
 
               // ================= vòng đời =================
@@ -708,6 +715,8 @@ jobs:
                   adLevel = Store.adLevel(this)
                   exc = Store.exceptions(this)
                   fx3d = Store.fx3d(this)
+                  popupBlock = Store.popupBlock(this)
+                  popExc = Store.popExc(this)
               }
 
               @Suppress("DEPRECATION")
@@ -818,6 +827,11 @@ jobs:
                       if (a == EditorInfo.IME_ACTION_GO) { go(urlEdit.text.toString()); hideKb(); true } else false
                   }
                   box.addView(urlEdit, lp(0, dp(44), 1f))
+                  starIcon = IconView(this, 12)
+                  starIcon.color = P.muted
+                  starIcon.contentDescription = "Yêu thích"
+                  starIcon.setOnClickListener { toggleBookmark() }
+                  box.addView(starIcon, lp(dp(40), dp(44)))
                   topBar.addView(box, lp(0, dp(44), 1f))
                   shieldChip = tv(this, "Chặn 0", 13f, P.accent, true)
                   shieldChip.gravity = Gravity.CENTER
@@ -989,6 +1003,17 @@ jobs:
                   homeIcon.color = if (!web) P.accent else P.text
                   tabsIcon.color = P.text
                   tabsIcon.count = tabs.size
+                  val fav = t.url.isNotEmpty() && Store.isBookmark(this, t.url)
+                  starIcon.filled = fav
+                  starIcon.color = if (fav) P.star else P.muted
+              }
+
+              private fun toggleBookmark() {
+                  val t = tabs[cur]
+                  if (t.url.isEmpty()) return
+                  if (Store.isBookmark(this, t.url)) { Store.removeBookmark(this, t.url); toast("Đã bỏ khỏi yêu thích") }
+                  else { Store.addBookmark(this, t.title, t.url); toast("Đã thêm vào yêu thích") }
+                  updateNav()
               }
 
               private fun updateShield() {
@@ -1035,7 +1060,7 @@ jobs:
 
                   val head = LinearLayout(this)
                   head.gravity = Gravity.CENTER_VERTICAL
-                  head.addView(tv(this, "Trình duyệt", 24f, P.text, true), lp(0, WRAP, 1f))
+                  head.addView(tv(this, "Trình Duyệt", 24f, P.text, true), lp(0, WRAP, 1f))
                   val chip = tv(this, "Chặn " + blockedTotal, 13f, P.accent, true)
                   chip.gravity = Gravity.CENTER
                   chip.background = rr(this, P.surface, 18, P.line)
@@ -1107,6 +1132,33 @@ jobs:
                   }
                   val rem = items.size % 4
                   if (rem != 0) for (k in 0 until 4 - rem) row!!.addView(View(this), lp(0, 1, 1f))
+
+                  // yêu thích
+                  val favs = Store.bookmarks(this).take(3)
+                  if (favs.isNotEmpty()) {
+                      val fr = LinearLayout(this)
+                      fr.gravity = Gravity.CENTER_VERTICAL
+                      fr.addView(tv(this, "Yêu thích", 14f, P.text, true), lp(0, WRAP, 1f))
+                      val fa = tv(this, "Xem tất cả", 13f, P.accent, true)
+                      fa.setPadding(dp(8), dp(8), 0, dp(8))
+                      fa.setOnClickListener { openFavorites() }
+                      fr.addView(fa)
+                      val frp = lp(MATCH, WRAP); frp.topMargin = dp(28)
+                      col.addView(fr, frp)
+                      for (fv in favs) {
+                          val r = LinearLayout(this)
+                          r.orientation = LinearLayout.VERTICAL
+                          r.background = rr(this, P.surface, 14, P.line)
+                          r.setPadding(dp(14), dp(12), dp(14), dp(12))
+                          val t1 = tv(this, fv.first, 14f, P.text, true); t1.maxLines = 1
+                          t1.ellipsize = android.text.TextUtils.TruncateAt.END
+                          r.addView(t1)
+                          r.addView(tv(this, hostOf(fv.second), 12f, P.muted))
+                          r.setOnClickListener { go(fv.second) }
+                          val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
+                          col.addView(r, rp)
+                      }
+                  }
 
                   // gần đây
                   val hist = Store.history(this).take(3)
@@ -1192,6 +1244,11 @@ jobs:
                       override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                           val u = req.url.toString()
                           if (u.startsWith("http://") || u.startsWith("https://")) return false
+                          if (popupBlock && !req.hasGesture() && !popExc.contains(hostOf(tab.url))) {
+                              tab.popups++; blockedTotal++
+                              if (tabs.getOrNull(cur) === tab) showPill("Đã chặn trang tự mở ứng dụng khác", null, null)
+                              return true
+                          }
                           try {
                               if (u.startsWith("intent:")) {
                                   val i = Intent.parseUri(u, Intent.URI_INTENT_SCHEME)
@@ -1208,6 +1265,7 @@ jobs:
                           tab.url = url
                           tab.media.clear()
                           tab.blocked = 0
+                          tab.popups = 0
                           if (tabs.getOrNull(cur) === tab) {
                               if (!urlEdit.hasFocus()) urlEdit.setText(url)
                               updateShield(); updateBubble(); updateNav()
@@ -1248,10 +1306,23 @@ jobs:
                       override fun onReceivedTitle(view: WebView, title: String?) { if (title != null) tab.title = title }
 
                       override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
-                          if (!isUserGesture && adOn) {
-                              blockedTotal++; tab.blocked++; updateShield()
-                              return false
+                          val host = hostOf(tab.url)
+                          val now = System.currentTimeMillis()
+                          if (popupBlock && !popExc.contains(host)) {
+                              val block = !isUserGesture || now - lastWindowTs < 1500 || now - tab.lastTouch > 2500
+                              if (block) {
+                                  tab.popups++; blockedTotal++
+                                  if (tabs.getOrNull(cur) === tab) {
+                                      showPill("Đã chặn cửa sổ bật lên", "Cho phép") {
+                                          val s = Store.popExc(this@MainActivity); if (host.isNotEmpty()) s.add(host)
+                                          Store.setPopExc(this@MainActivity, s); popExc = s
+                                          toast("Đã cho phép $host mở cửa sổ mới. Bấm lại liên kết.")
+                                      }
+                                  }
+                                  return false
+                              }
                           }
+                          lastWindowTs = now
                           val nt = Tab()
                           nt.web = makeWeb(nt)
                           tabs.add(nt)
@@ -1312,6 +1383,10 @@ jobs:
                       }
                   }
 
+                  w.setOnTouchListener { _, e ->
+                      if (e.action == MotionEvent.ACTION_UP || e.action == MotionEvent.ACTION_DOWN) tab.lastTouch = System.currentTimeMillis()
+                      false
+                  }
                   w.setOnLongClickListener {
                       val r = w.hitTestResult
                       val ex = r.extra
@@ -1327,6 +1402,20 @@ jobs:
                       } else false
                   }
                   return w
+              }
+
+              private fun showPill(msg: String, action: String?, onAction: (() -> Unit)?) {
+                  pill?.let { root.removeView(it) }
+                  val t = tv(this, if (action != null) "$msg  ·  $action" else msg, 13f, P.text, true)
+                  t.background = rr(this, P.surface, 22, P.accent)
+                  t.setPadding(dp(16), dp(12), dp(16), dp(12))
+                  t.elevation = dp(8).toFloat()
+                  t.setOnClickListener { onAction?.invoke(); root.removeView(t); if (pill === t) pill = null }
+                  val p = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+                  p.bottomMargin = dp(80)
+                  root.addView(t, p)
+                  pill = t
+                  main.postDelayed({ if (pill === t) { root.removeView(t); pill = null } }, 4000)
               }
 
               private fun hideCustom() {
@@ -1523,12 +1612,14 @@ jobs:
                       panel.addView(r, lp(MATCH, WRAP))
                   }
                   if (onWeb) {
+                      row(if (Store.isBookmark(this, t.url)) "Bỏ khỏi yêu thích" else "Thêm vào yêu thích") { toggleBookmark() }
                       row("Chia sẻ liên kết") { shareText(t.url) }
                       row("Sao chép liên kết") { copy(t.url) }
                       row("Mở bằng app khác") { openOther(t.url) }
                       row("Video trên trang (${t.media.size})") { openMedia() }
                       row("Làm mới trang") { t.web?.reload() }
                   }
+                  row("Yêu thích") { openFavorites() }
                   row("Tải xuống") { openDownloads() }
                   row("Lịch sử") { openHistory() }
                   row("Cài đặt") { openSettings() }
@@ -1562,7 +1653,7 @@ jobs:
                   val h = hostOf(t.url)
                   val off = exc.contains(h)
                   dlg().setTitle(h.ifEmpty { "Trang này" })
-                      .setMessage(if (!adOn) "Chặn quảng cáo đang tắt trong Cài đặt." else if (off) "Đã tắt chặn cho trang này." else "Đã chặn ${t.blocked} mục trên trang này.")
+                      .setMessage(if (!adOn) "Chặn quảng cáo đang tắt trong Cài đặt." else if (off) "Đã tắt chặn cho trang này." else "Đã chặn ${t.blocked} mục quảng cáo và ${t.popups} cửa sổ bật lên trên trang này.")
                       .setPositiveButton(if (off) "Bật chặn lại" else "Tắt chặn cho trang này") { _, _ ->
                           val s = Store.exceptions(this)
                           if (off) s.remove(h) else if (h.isNotEmpty()) s.add(h)
@@ -1621,7 +1712,7 @@ jobs:
                       }
                       val r2 = LinearLayout(this)
                       val rp = lp(MATCH, WRAP); rp.topMargin = dp(10)
-                      val b1 = btn(this, "Phát", P.accent, Color.WHITE, 0) { popOverlay(); playUrl(m, t, ua) }
+                      val b1 = btn(this, "Phát", P.accent, P.onAccent, 0) { popOverlay(); playUrl(m, t, ua) }
                       val b2 = btn(this, "Sao chép", P.surface, P.text, P.line) { copy(m.url) }
                       val b3 = btn(this, "Tải về", P.surface, if (m.type == "DASH") P.muted else P.text, P.line) { popOverlay(); startDownload(m, t) }
                       r2.addView(b1, lp(0, WRAP, 1f))
@@ -1679,7 +1770,7 @@ jobs:
                   list.setPadding(dp(24), dp(12), dp(24), dp(40))
                   sv.addView(list)
                   col.addView(sv, lp(MATCH, 0, 1f))
-                  val add = btn(this, "Tab mới", P.accent, Color.WHITE, 0) { popOverlay(); newTab() }
+                  val add = btn(this, "Tab mới", P.accent, P.onAccent, 0) { popOverlay(); newTab() }
                   val ap = lp(MATCH, dp(52)); ap.setMargins(dp(20), dp(8), dp(20), dp(16))
                   col.addView(add, ap)
                   f.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -1704,7 +1795,7 @@ jobs:
                           x.setOnClickListener { closeTab(i); render() }
                           hr.addView(x, lp(dp(40), dp(32)))
                           card.addView(hr)
-                          val sub = tv(this, if (t.url.isEmpty()) "Trang chủ Trình duyệt" else hostOf(t.url), 12f, P.muted)
+                          val sub = tv(this, if (t.url.isEmpty()) "Trang chủ Trình Duyệt" else hostOf(t.url), 12f, P.muted)
                           card.addView(sub)
                           val img = ImageView(this)
                           img.scaleType = ImageView.ScaleType.CENTER_CROP
@@ -1722,6 +1813,48 @@ jobs:
                               card.rotationX = 12f
                           }
                           list.addView(card, cp)
+                      }
+                  }
+                  render()
+                  pushOverlay(f)
+              }
+
+              // ---- yêu thích ----
+              private fun openFavorites() {
+                  val (f, body) = screen("Yêu thích")
+                  val list = LinearLayout(this)
+                  list.orientation = LinearLayout.VERTICAL
+                  body.addView(list, lp(MATCH, WRAP))
+                  fun render() {
+                      list.removeAllViews()
+                      val items = Store.bookmarks(this)
+                      if (items.isEmpty()) {
+                          val e = tv(this, "Chưa có trang yêu thích. Bấm ngôi sao trên thanh địa chỉ để thêm trang đang xem.", 14f, P.muted)
+                          e.setPadding(0, dp(16), 0, 0); list.addView(e)
+                      }
+                      for (b in items) {
+                          val r = LinearLayout(this)
+                          r.gravity = Gravity.CENTER_VERTICAL
+                          r.background = rr(this, P.surface, 14, P.line)
+                          r.setPadding(dp(14), dp(8), dp(4), dp(8))
+                          val star = IconView(this, 12)
+                          star.filled = true; star.color = P.star
+                          r.addView(star, lp(dp(28), dp(28)))
+                          val col = LinearLayout(this)
+                          col.orientation = LinearLayout.VERTICAL
+                          val t1 = tv(this, b.first, 14f, P.text, true); t1.maxLines = 1; t1.ellipsize = android.text.TextUtils.TruncateAt.END
+                          col.addView(t1)
+                          col.addView(tv(this, hostOf(b.second), 12f, P.muted))
+                          col.setOnClickListener { while (overlays.isNotEmpty()) popOverlay(); go(b.second) }
+                          val cp = lp(0, WRAP, 1f); cp.leftMargin = dp(12)
+                          r.addView(col, cp)
+                          val x = IconView(this, 5)
+                          x.color = P.muted
+                          x.contentDescription = "Bỏ yêu thích"
+                          x.setOnClickListener { Store.removeBookmark(this, b.second); render() }
+                          r.addView(x, lp(dp(44), dp(44)))
+                          val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
+                          list.addView(r, rp)
                       }
                   }
                   render()
@@ -1838,13 +1971,13 @@ jobs:
                           if (d.status <= 1) {
                               br.addView(btn(this, "Hủy", P.bg, P.video, P.line) { d.cancel = true }, lp(0, WRAP, 1f))
                           } else if (d.status == 2 && d.uri != null) {
-                              br.addView(btn(this, "Phát", P.accent, Color.WHITE, 0) {
+                              br.addView(btn(this, "Phát", P.accent, P.onAccent, 0) {
                                   startActivity(Intent(this, PlayerActivity::class.java).putExtra("url", d.uri).putExtra("title", d.fileName))
                               }, lp(0, WRAP, 1f))
                               val o = lp(0, WRAP, 1f); o.leftMargin = dp(8)
                               br.addView(btn(this, "App khác", P.bg, P.text, P.line) {
                                   try {
-                                      val i = Intent(Intent.ACTION_VIEW); i.setDataAndType(Uri.parse(d.uri), "video/*"); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                      val i = Intent(Intent.ACTION_VIEW); i.setDataAndType(Uri.parse(d.uri ?: ""), "video/*"); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                       startActivity(Intent.createChooser(i, "Mở bằng"))
                                   } catch (e: Exception) { toast("Không có app phù hợp") }
                               }, o)
@@ -1914,6 +2047,29 @@ jobs:
                   renderExc()
                   body.addView(excBox)
 
+                  sec("Cửa sổ bật lên")
+                  swRow("Chặn popup và tự mở tab mới", "Chặn trang tự mở tab, cửa sổ quảng cáo hoặc tự mở app khác khi bạn chưa bấm", popupBlock) { Store.setPopupBlock(this, it); popupBlock = it }
+                  val popBox = LinearLayout(this)
+                  popBox.orientation = LinearLayout.VERTICAL
+                  fun renderPop() {
+                      popBox.removeAllViews()
+                      if (popExc.isEmpty()) return
+                      val t = tv(this, "Trang được phép mở cửa sổ mới", 15f, P.text, true)
+                      t.setPadding(0, dp(12), 0, dp(4))
+                      popBox.addView(t)
+                      for (h in popExc.sorted()) {
+                          val r = LinearLayout(this)
+                          r.gravity = Gravity.CENTER_VERTICAL
+                          r.addView(tv(this, h, 14f, P.text), lp(0, WRAP, 1f))
+                          val x = IconView(this, 5); x.color = P.muted
+                          x.setOnClickListener { val s = Store.popExc(this); s.remove(h); Store.setPopExc(this, s); popExc = s; renderPop() }
+                          r.addView(x, lp(dp(44), dp(44)))
+                          popBox.addView(r)
+                      }
+                  }
+                  renderPop()
+                  body.addView(popBox)
+
                   sec("Giao diện")
                   segRow(listOf("Sáng", "Tối", "Hệ thống"), Store.theme(this)) { Store.setTheme(this, it); saveTabs(); recreate() }
                   swRow("Hiệu ứng 3D", "Bong bóng xoay và tab xếp lớp. Tắt nếu máy chậm.", fx3d) { Store.setFx3d(this, it); fx3d = it }
@@ -1933,7 +2089,7 @@ jobs:
                   body.addView(clr, cp)
 
                   sec("Trình duyệt mặc định")
-                  body.addView(tv(this, "Đặt Trình duyệt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Trình duyệt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
+                  body.addView(tv(this, "Đặt Trình Duyệt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Trình Duyệt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
                   val dflt = btn(this, "Mở cài đặt ứng dụng mặc định", P.surface, P.text, P.line) {
                       try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { toast("Không mở được cài đặt") }
                   }
@@ -2065,8 +2221,8 @@ jobs:
                   row.orientation = LinearLayout.HORIZONTAL
                   row.gravity = Gravity.CENTER_VERTICAL
                   playBtn = IconView(this, 7)
-                  playBtn.color = Color.WHITE
-                  playBtn.background = rrr(Color.parseColor("#4C8DFF"))
+                  playBtn.color = Color.parseColor("#06223A")
+                  playBtn.background = rrr(Color.parseColor("#5BB4F5"))
                   playBtn.contentDescription = "Phát hoặc tạm dừng"
                   playBtn.setOnClickListener { toggle() }
                   row.addView(playBtn, lp(dp(56), dp(56)))
@@ -2270,6 +2426,11 @@ jobs:
               fun blockedTotal(c: Context) = sp(c).getInt("blockedTotal", 0)
               fun setBlockedTotal(c: Context, v: Int) = sp(c).edit().putInt("blockedTotal", v).apply()
 
+              fun popupBlock(c: Context) = sp(c).getBoolean("popupBlock", true)
+              fun setPopupBlock(c: Context, v: Boolean) = sp(c).edit().putBoolean("popupBlock", v).apply()
+              fun popExc(c: Context): MutableSet<String> = HashSet(sp(c).getStringSet("popExc", emptySet()) ?: emptySet())
+              fun setPopExc(c: Context, s: Set<String>) = sp(c).edit().putStringSet("popExc", HashSet(s)).apply()
+
               fun exceptions(c: Context): MutableSet<String> = HashSet(sp(c).getStringSet("exc", emptySet()) ?: emptySet())
               fun setExceptions(c: Context, s: Set<String>) = sp(c).edit().putStringSet("exc", HashSet(s)).apply()
 
@@ -2301,6 +2462,28 @@ jobs:
 
               fun removeHistory(c: Context, ts: Long) = saveHistList(c, history(c).filter { it.ts != ts })
               fun clearHistory(c: Context) = sp(c).edit().putString("hist", "").apply()
+
+              // ---- yêu thích ----
+              fun bookmarks(c: Context): List<Pair<String, String>> {
+                  val out = ArrayList<Pair<String, String>>()
+                  for (line in (sp(c).getString("bm", "") ?: "").split("\n")) {
+                      val p = line.split("\t")
+                      if (p.size == 2) out.add(Pair(p[0], p[1]))
+                  }
+                  return out
+              }
+
+              private fun saveBm(c: Context, l: List<Pair<String, String>>) {
+                  sp(c).edit().putString("bm", l.joinToString("\n") { "${it.first.replace('\t', ' ').replace('\n', ' ')}\t${it.second}" }).apply()
+              }
+
+              fun isBookmark(c: Context, url: String) = bookmarks(c).any { it.second == url }
+              fun addBookmark(c: Context, title: String, url: String) {
+                  val l = ArrayList(bookmarks(c).filter { it.second != url })
+                  l.add(0, Pair(title.ifBlank { url }, url))
+                  saveBm(c, l)
+              }
+              fun removeBookmark(c: Context, url: String) = saveBm(c, bookmarks(c).filter { it.second != url })
 
               // ---- lối tắt trang chủ ----
               fun shortcuts(c: Context): MutableList<Pair<String, String>> {
@@ -2387,17 +2570,21 @@ jobs:
               var accent = 0
               var video = 0
               var ok = 0
+              var onAccent = 0
+              var star = 0
 
               private fun c(s: String) = Color.parseColor(s)
 
               fun apply(d: Boolean) {
                   dark = d
                   if (d) {
-                      bg = c("#0E1117"); surface = c("#171C24"); line = c("#262E3A"); text = c("#F1F5F9")
-                      muted = c("#9AA7B8"); accent = c("#4C8DFF"); video = c("#FF8A4C"); ok = c("#3DDC97")
+                      bg = c("#0B1622"); surface = c("#132334"); line = c("#223A52"); text = c("#EAF3FB")
+                      muted = c("#8FA9C0"); accent = c("#5BB4F5"); video = c("#FFA36B"); ok = c("#5EE0B5")
+                      onAccent = c("#06223A"); star = c("#FFD166")
                   } else {
-                      bg = c("#F4F6F9"); surface = c("#FFFFFF"); line = c("#E2E8F0"); text = c("#0F172A")
-                      muted = c("#5B6B80"); accent = c("#2563EB"); video = c("#C2410C"); ok = c("#0B7A4B")
+                      bg = c("#EEF6FC"); surface = c("#FFFFFF"); line = c("#D3E4F2"); text = c("#0F2A3F")
+                      muted = c("#4F6B82"); accent = c("#1670B8"); video = c("#B8480E"); ok = c("#0B7A5A")
+                      onAccent = c("#FFFFFF"); star = c("#C98A00")
                   }
               }
           }
@@ -2450,7 +2637,7 @@ jobs:
               fun paint(s: Int) {
                   for (i in views.indices) {
                       val a = i == s
-                      views[i].setTextColor(if (a) Color.WHITE else P.text)
+                      views[i].setTextColor(if (a) P.onAccent else P.text)
                       views[i].background = rr(c, if (a) P.accent else P.surface, 12, if (a) P.accent else P.line)
                   }
               }
@@ -2473,6 +2660,8 @@ jobs:
               var color = 0
                   set(v) { field = v; invalidate() }
               var count = 0
+                  set(v) { field = v; invalidate() }
+              var filled = false
                   set(v) { field = v; invalidate() }
               private val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -2507,6 +2696,19 @@ jobs:
                           c.drawCircle(cx, cy - 7 * u, 2f * u, p); c.drawCircle(cx, cy, 2f * u, p); c.drawCircle(cx, cy + 7 * u, 2f * u, p)
                       }
                       5 -> { path.moveTo(cx - 5 * u, cy - 5 * u); path.lineTo(cx + 5 * u, cy + 5 * u); path.moveTo(cx + 5 * u, cy - 5 * u); path.lineTo(cx - 5 * u, cy + 5 * u); c.drawPath(path, p) }
+                      12 -> {
+                          for (k in 0 until 10) {
+                              val r = if (k % 2 == 0) 10 * u else 4.4f * u
+                              val ang = Math.PI / 5 * k - Math.PI / 2
+                              val x = cx + (r * Math.cos(ang)).toFloat()
+                              val y = cy + 1 * u + (r * Math.sin(ang)).toFloat()
+                              if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                          }
+                          path.close()
+                          p.style = if (filled) Paint.Style.FILL_AND_STROKE else Paint.Style.STROKE
+                          p.strokeWidth = 1.6f * u
+                          c.drawPath(path, p)
+                      }
                       7 -> {
                           p.style = Paint.Style.FILL
                           path.moveTo(cx - 5 * u, cy - 8 * u); path.lineTo(cx - 5 * u, cy + 8 * u); path.lineTo(cx + 8 * u, cy); path.close()
@@ -2568,7 +2770,7 @@ jobs:
                   val r = w / 2f - context.dp(8)
                   p.style = Paint.Style.FILL
                   p.shader = RadialGradient(cx - r * 0.3f, cy - r * 0.4f, r * 1.5f,
-                      intArrayOf(0xFFFFC18F.toInt(), 0xFFFF8A4C.toInt(), 0xFFD95B17.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+                      intArrayOf(0xFFB8E3FF.toInt(), 0xFF5BB4F5.toInt(), 0xFF2677BA.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
                   c.drawCircle(cx, cy, r, p)
                   p.shader = null
                   p.color = 0x55FFFFFF
@@ -2593,7 +2795,7 @@ jobs:
                   val br = context.dp(11).toFloat()
                   p.color = Color.WHITE
                   c.drawCircle(bx, by, br, p)
-                  p.color = Color.parseColor("#B34510")
+                  p.color = Color.parseColor("#0B4F85")
                   p.textSize = br * 1.15f
                   p.textAlign = Paint.Align.CENTER
                   p.typeface = Typeface.DEFAULT_BOLD
@@ -2610,10 +2812,10 @@ jobs:
               android:viewportWidth="108"
               android:viewportHeight="108">
               <path
-                  android:fillColor="#0E1117"
+                  android:fillColor="#0B1622"
                   android:pathData="M18,0 L90,0 A18,18 0 0 1 108,18 L108,90 A18,18 0 0 1 90,108 L18,108 A18,18 0 0 1 0,90 L0,18 A18,18 0 0 1 18,0 Z" />
               <path
-                  android:fillColor="#4C8DFF"
+                  android:fillColor="#5BB4F5"
                   android:pathData="M54,18 A36,36 0 1 1 53.9,18 Z" />
               <path
                   android:fillColor="#FFFFFF"
@@ -2624,7 +2826,7 @@ jobs:
           cat > "app/src/main/res/values/strings.xml" <<'AMLICH_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <string name="app_name">Trình duyệt</string>
+              <string name="app_name">Trình Duyệt</string>
           </resources>
           AMLICH_EOF
           cat > "build.gradle" <<'AMLICH_EOF'
