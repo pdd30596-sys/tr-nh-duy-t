@@ -1,4 +1,4 @@
-name: Build Trinh Duyet
+name: Build Luot
 
 on:
   push:
@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 3
-                  versionName "1.2"
+                  versionCode 5
+                  versionName "1.4"
               }
 
               signingConfigs {
@@ -118,9 +118,76 @@ jobs:
           cat > "app/src/main/java/vn/luot/app/AdBlock.kt" <<'AMLICH_EOF'
           package vn.luot.app
 
+          import android.content.Context
           import android.net.Uri
+          import java.io.File
+          import java.net.HttpURLConnection
+          import java.net.URL
 
           object AdBlock {
+              @Volatile private var extra: HashSet<String> = HashSet()
+              val extraCount: Int get() = extra.size
+
+              private val lists = listOf(
+                  "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt",
+                  "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext"
+              )
+
+              fun loadExtra(ctx: Context) {
+                  try {
+                      val f = File(ctx.filesDir, "filter.txt")
+                      if (!f.exists()) return
+                      val s = HashSet<String>()
+                      f.forEachLine { if (it.isNotBlank()) s.add(it.trim()) }
+                      extra = s
+                  } catch (e: Exception) { }
+              }
+
+              private fun parse(text: String, into: HashSet<String>) {
+                  for (raw in text.lineSequence()) {
+                      val l = raw.trim()
+                      if (l.isEmpty() || l.startsWith("#") || l.startsWith("!") || l.startsWith("@@")) continue
+                      var d: String? = null
+                      if (l.startsWith("||")) {
+                          val e = l.indexOf('^')
+                          if (e > 2) d = l.substring(2, e)
+                      } else if (l.startsWith("0.0.0.0 ") || l.startsWith("127.0.0.1 ")) {
+                          d = l.substringAfter(' ').trim().substringBefore(' ')
+                      }
+                      if (d == null) continue
+                      d = d.lowercase()
+                      if (d.contains('*') || d.contains('/') || d.contains(':') || !d.contains('.') || d == "localhost") continue
+                      into.add(d)
+                  }
+              }
+
+              /** Tải danh sách lọc mở rộng. Trả về số tên miền, hoặc -1 nếu lỗi hoàn toàn. */
+              fun updateExtra(ctx: Context): Int {
+                  val s = HashSet<String>()
+                  for (u in lists) {
+                      try {
+                          val c = URL(u).openConnection() as HttpURLConnection
+                          c.connectTimeout = 15000; c.readTimeout = 30000
+                          c.setRequestProperty("User-Agent", "Mozilla/5.0 Luot")
+                          if (c.responseCode in 200..299) parse(String(c.inputStream.use { it.readBytes() }, Charsets.UTF_8), s)
+                          c.disconnect()
+                      } catch (e: Exception) { }
+                  }
+                  if (s.size < 500) return -1
+                  try { File(ctx.filesDir, "filter.txt").writeText(s.joinToString("\n")) } catch (e: Exception) { }
+                  extra = s
+                  return s.size
+              }
+
+              /** Dùng cho điều hướng trang chính: tên miền này có thuộc danh sách quảng cáo không. */
+              fun isAdHost(url: String, level: Int): Boolean {
+                  val host = try { Uri.parse(url).host?.lowercase() } catch (e: Exception) { null } ?: return false
+                  if (hostMatch(host, base)) return true
+                  if (level >= 1 && (hostMatch(host, mid) || hostMatch(host, extra))) return true
+                  if (level >= 2 && hostMatch(host, strong)) return true
+                  return false
+              }
+
               // Mức 1 (Nhẹ): mạng quảng cáo lớn
               private val base = hashSetOf(
                   "doubleclick.net", "googlesyndication.com", "googleadservices.com", "adservice.google.com",
@@ -170,7 +237,7 @@ jobs:
               fun shouldBlock(url: String, level: Int): Boolean {
                   val host = try { Uri.parse(url).host?.lowercase() } catch (e: Exception) { null } ?: return false
                   if (hostMatch(host, base)) return true
-                  if (level >= 1 && hostMatch(host, mid)) return true
+                  if (level >= 1 && (hostMatch(host, mid) || hostMatch(host, extra))) return true
                   if (level >= 2) {
                       if (hostMatch(host, strong)) return true
                       val l = url.lowercase()
@@ -183,11 +250,19 @@ jobs:
               fun cosmeticJs(level: Int): String {
                   if (level < 1) return ""
                   var css = "ins.adsbygoogle,.adsbygoogle,[id^=\"div-gpt-ad\"],[id^=\"google_ads\"],[class*=\"ad-banner\"],[class*=\"adsbox\"]," +
-                      "iframe[src*=\"doubleclick\"],iframe[src*=\"googlesyndication\"],iframe[id^=\"google_ads\"]"
-                  if (level >= 2) css += ",[class*=\"advert\"],[id*=\"advert\"],.ad-slot,.ad-wrapper,.ad-box,.ad-container,[class$=\"-ads\"],[id$=\"-ads\"]"
+                      "iframe[src*=\"doubleclick\"],iframe[src*=\"googlesyndication\"],iframe[id^=\"google_ads\"],iframe[src*=\"/ads/\"],iframe[src*=\"adserver\"]," +
+                      "[id^=\"taboola\"],[class*=\"taboola\"],[id^=\"outbrain\"],[class*=\"outbrain\"],[data-ad-slot],[data-google-query-id],[aria-label=\"Advertisement\"],[aria-label=\"Quảng cáo\"]," +
+                      "[class*=\"banner-ads\"],[class*=\"ads-banner\"],[class*=\"ad-placeholder\"],[class*=\"sponsor-ad\"],[id*=\"ad-slot\"],[class*=\"adslot\"]"
+                  if (level >= 2) css += ",[class*=\"advert\"],[id*=\"advert\"],.ad-slot,.ad-wrapper,.ad-box,.ad-container,[class$=\"-ads\"],[id$=\"-ads\"],[class^=\"ads-\"],[class*=\" ads-\"],[id^=\"ads-\"],[class*=\"popup-ad\"],[class*=\"floating-ad\"],[class*=\"sticky-ad\"]"
                   css += "{display:none!important;visibility:hidden!important}"
                   return "(function(){try{if(document.getElementById('luot-ab'))return;var s=document.createElement('style');s.id='luot-ab';s.textContent='" +
                       css.replace("'", "\\'") + "';(document.head||document.documentElement).appendChild(s);}catch(e){}})();"
+              }
+
+              /** Chặn window.open khi người dùng chưa chạm trong 1 giây gần nhất. */
+              fun guardJs(): String {
+                  return "(function(){try{if(window.__luot)return;window.__luot=1;var last=0;['touchstart','touchend','click','keydown'].forEach(function(e){window.addEventListener(e,function(){last=Date.now();},true);});" +
+                      "var o=window.open;window.open=function(){if(Date.now()-last>1000)return null;return o.apply(window,arguments);};}catch(e){}})();"
               }
           }
           AMLICH_EOF
@@ -587,7 +662,7 @@ jobs:
                       nm.createNotificationChannel(NotificationChannel("dl", "Tải video", NotificationManager.IMPORTANCE_LOW))
                       return Notification.Builder(ctx, "dl")
                           .setSmallIcon(android.R.drawable.stat_sys_download)
-                          .setContentTitle("Trình Duyệt đang tải $count video")
+                          .setContentTitle("Lướt đang tải $count video")
                           .setOngoing(true)
                           .setProgress(100, avg, indeterminate)
                           .build()
@@ -657,6 +732,8 @@ jobs:
           import java.util.Date
           import java.util.Locale
 
+          const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
           class MediaItem(val url: String, val type: String, val referer: String?)
 
           class Tab(var title: String = "Tab mới", var url: String = "") {
@@ -666,6 +743,9 @@ jobs:
               var thumb: Bitmap? = null
               var progress = 100
               var popups = 0
+              var opener: Tab? = null
+              var desktop = false
+              var mobileUa: String? = null
               @Volatile var lastTouch = 0L
           }
 
@@ -701,6 +781,12 @@ jobs:
               @Volatile private var popExc: Set<String> = emptySet()
               private var lastWindowTs = 0L
               private var pill: TextView? = null
+              private var findBar: LinearLayout? = null
+              private var findWeb: WebView? = null
+              private lateinit var pullIcon: IconView
+              private var pullStartY = 0f
+              private var pullCand = false
+              private var pullDy = 0f
               private var fx3d = true
 
               // ================= vòng đời =================
@@ -725,6 +811,8 @@ jobs:
                   super.onCreate(savedInstanceState)
                   loadPrefs()
                   blockedTotal = Store.blockedTotal(this)
+                  AdBlock.loadExtra(this)
+                  if (Store.adOn(this) && System.currentTimeMillis() - Store.filterTs(this) > 7L * 86400000L) updateFilterAsync(null)
                   Downloader.load(this)
                   window.statusBarColor = P.bg
                   window.navigationBarColor = P.bg
@@ -737,6 +825,14 @@ jobs:
                   Downloader.onChange = { main.removeCallbacks(dlTick); main.postDelayed(dlTick, 300) }
                   showTab()
                   if (savedInstanceState == null) handleIntent(intent)
+              }
+
+              private fun updateFilterAsync(done: ((Int) -> Unit)?) {
+                  Thread {
+                      val n = AdBlock.updateExtra(this)
+                      if (n > 0) Store.setFilterInfo(this, System.currentTimeMillis(), n)
+                      if (done != null) runOnUiThread { done(n) }
+                  }.start()
               }
 
               private val dlTick = Runnable { dlRefresh?.invoke() }
@@ -874,6 +970,13 @@ jobs:
                   col.addView(nav, lp(MATCH, WRAP))
                   root.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
 
+                  pullIcon = IconView(this, 13)
+                  pullIcon.color = P.accent
+                  pullIcon.background = rr(this, P.surface, 20, P.line)
+                  pullIcon.elevation = dp(6).toFloat()
+                  pullIcon.alpha = 0f
+                  pullIcon.visibility = View.GONE
+                  root.addView(pullIcon, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
                   bubble = Bubble(this)
                   bubble.visibility = View.GONE
                   root.addView(bubble, FrameLayout.LayoutParams(dp(76), dp(76)))
@@ -948,10 +1051,20 @@ jobs:
                   showTab()
               }
 
+              private fun closeToOpener(t: Tab) {
+                  val op = t.opener
+                  val i = tabs.indexOf(t)
+                  if (i < 0) return
+                  closeTab(i)
+                  if (op != null && tabs.contains(op)) cur = tabs.indexOf(op)
+                  showTab()
+              }
+
               private fun navBack() {
                   val t = tabs[cur]
                   val w = t.web
                   if (w != null && w.canGoBack()) w.goBack()
+                  else if (w != null && t.opener != null && tabs.contains(t.opener)) closeToOpener(t)
                   else if (w != null) goHome()
               }
 
@@ -960,8 +1073,10 @@ jobs:
                   if (w != null && w.canGoForward()) w.goForward()
               }
 
-              private fun newTab(url: String? = null) {
-                  tabs.add(Tab())
+              private fun newTab(url: String? = null, opener: Tab? = null) {
+                  val nt0 = Tab()
+                  nt0.opener = opener
+                  tabs.add(nt0)
                   cur = tabs.size - 1
                   if (url != null) go(url) else showTab()
               }
@@ -975,6 +1090,7 @@ jobs:
               }
 
               private fun showTab() {
+                  if (findBar != null) closeFind()
                   content.removeAllViews()
                   val t = tabs[cur]
                   if (t.web == null && t.url.isEmpty()) {
@@ -1060,7 +1176,7 @@ jobs:
 
                   val head = LinearLayout(this)
                   head.gravity = Gravity.CENTER_VERTICAL
-                  head.addView(tv(this, "Trình Duyệt", 24f, P.text, true), lp(0, WRAP, 1f))
+                  head.addView(tv(this, "Lướt", 24f, P.text, true), lp(0, WRAP, 1f))
                   val chip = tv(this, "Chặn " + blockedTotal, 13f, P.accent, true)
                   chip.gravity = Gravity.CENTER
                   chip.background = rr(this, P.surface, 18, P.line)
@@ -1224,6 +1340,7 @@ jobs:
                   s.displayZoomControls = false
                   s.allowFileAccess = false
                   if (Build.VERSION.SDK_INT >= 33) s.isAlgorithmicDarkeningAllowed = P.dark
+                  tab.mobileUa = s.userAgentString
                   w.setBackgroundColor(P.bg)
                   CookieManager.getInstance().setAcceptCookie(true)
                   CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
@@ -1243,7 +1360,15 @@ jobs:
 
                       override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                           val u = req.url.toString()
-                          if (u.startsWith("http://") || u.startsWith("https://")) return false
+                          if (u.startsWith("http://") || u.startsWith("https://")) {
+                              if (adOn && !exc.contains(hostOf(tab.url)) && (req.isRedirect || !req.hasGesture() || tab.opener != null) && AdBlock.isAdHost(u, adLevel)) {
+                                  tab.popups++; blockedTotal++
+                                  if (tab.opener != null && tab.url.isEmpty()) main.post { closeToOpener(tab) }
+                                  else if (tabs.getOrNull(cur) === tab) showPill("Đã chặn trang quảng cáo tự chuyển", null, null)
+                                  return true
+                              }
+                              return false
+                          }
                           if (popupBlock && !req.hasGesture() && !popExc.contains(hostOf(tab.url))) {
                               tab.popups++; blockedTotal++
                               if (tabs.getOrNull(cur) === tab) showPill("Đã chặn trang tự mở ứng dụng khác", null, null)
@@ -1266,6 +1391,7 @@ jobs:
                           tab.media.clear()
                           tab.blocked = 0
                           tab.popups = 0
+                          if (popupBlock) view.evaluateJavascript(AdBlock.guardJs(), null)
                           if (tabs.getOrNull(cur) === tab) {
                               if (!urlEdit.hasFocus()) urlEdit.setText(url)
                               updateShield(); updateBubble(); updateNav()
@@ -1276,6 +1402,7 @@ jobs:
                           tab.url = url
                           tab.title = view.title ?: url
                           if (Store.saveHist(this@MainActivity) && url.startsWith("http")) Store.addHistory(this@MainActivity, tab.title, url)
+                          if (popupBlock) view.evaluateJavascript(AdBlock.guardJs(), null)
                           if (adOn && !exc.contains(hostOf(url))) view.evaluateJavascript(AdBlock.cosmeticJs(adLevel), null)
                           scanVideos(tab)
                           main.postDelayed({ scanVideos(tab) }, 3000)
@@ -1300,6 +1427,10 @@ jobs:
                   w.webChromeClient = object : WebChromeClient() {
                       override fun onProgressChanged(view: WebView, p: Int) {
                           tab.progress = p
+                          if (p in 20..60) {
+                              if (popupBlock) view.evaluateJavascript(AdBlock.guardJs(), null)
+                              if (adOn && !exc.contains(hostOf(tab.url))) view.evaluateJavascript(AdBlock.cosmeticJs(adLevel), null)
+                          }
                           if (tabs.getOrNull(cur) === tab) progressBar.scaleX = if (p in 1..99) p / 100f else 0f
                       }
 
@@ -1325,6 +1456,7 @@ jobs:
                           lastWindowTs = now
                           val nt = Tab()
                           nt.web = makeWeb(nt)
+                          nt.opener = tab
                           tabs.add(nt)
                           cur = tabs.size - 1
                           showTab()
@@ -1384,7 +1516,33 @@ jobs:
                   }
 
                   w.setOnTouchListener { _, e ->
-                      if (e.action == MotionEvent.ACTION_UP || e.action == MotionEvent.ACTION_DOWN) tab.lastTouch = System.currentTimeMillis()
+                      when (e.action) {
+                          MotionEvent.ACTION_DOWN -> {
+                              tab.lastTouch = System.currentTimeMillis()
+                              pullStartY = e.rawY
+                              pullDy = 0f
+                              pullCand = tabs.getOrNull(cur) === tab && overlays.isEmpty() && !w.canScrollVertically(-1)
+                          }
+                          MotionEvent.ACTION_MOVE -> {
+                              if (pullCand) {
+                                  val dy = e.rawY - pullStartY
+                                  if (dy < -dp(6)) { pullCand = false; hidePull() }
+                                  else if (dy > dp(12)) {
+                                      pullDy = dy
+                                      pullIcon.visibility = View.VISIBLE
+                                      pullIcon.alpha = (dy / dp(100)).coerceIn(0f, 1f)
+                                      pullIcon.rotation = dy * 2f
+                                      pullIcon.translationY = content.top + (dy * 0.4f).coerceAtMost(dp(70).toFloat()) - dp(30)
+                                  }
+                              }
+                          }
+                          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                              tab.lastTouch = System.currentTimeMillis()
+                              if (pullCand && e.action == MotionEvent.ACTION_UP && pullDy > dp(100)) { w.reload(); toast("Đang làm mới...") }
+                              pullCand = false
+                              hidePull()
+                          }
+                      }
                       false
                   }
                   w.setOnLongClickListener {
@@ -1393,7 +1551,7 @@ jobs:
                       if ((r.type == WebView.HitTestResult.SRC_ANCHOR_TYPE || r.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) && ex != null) {
                           dlg().setTitle(ex.take(80)).setItems(arrayOf("Mở trong tab mới", "Sao chép liên kết", "Chia sẻ liên kết")) { _, i ->
                               when (i) {
-                                  0 -> newTab(ex)
+                                  0 -> newTab(ex, tab)
                                   1 -> copy(ex)
                                   2 -> shareText(ex)
                               }
@@ -1402,6 +1560,83 @@ jobs:
                       } else false
                   }
                   return w
+              }
+
+              private fun hidePull() {
+                  pullDy = 0f
+                  pullIcon.animate().alpha(0f).setDuration(150).withEndAction { pullIcon.visibility = View.GONE }.start()
+              }
+
+              // ---- tìm trong trang ----
+              private fun openFind() {
+                  val w = tabs[cur].web ?: return
+                  closeFind()
+                  val bar = LinearLayout(this)
+                  bar.orientation = LinearLayout.HORIZONTAL
+                  bar.gravity = Gravity.CENTER_VERTICAL
+                  bar.background = rr(this, P.surface, 26, P.accent)
+                  bar.setPadding(dp(16), 0, dp(4), 0)
+                  bar.elevation = dp(8).toFloat()
+                  val et = EditText(this)
+                  et.background = null
+                  et.hint = "Tìm trong trang"
+                  et.setHintTextColor(P.muted)
+                  et.setTextColor(P.text)
+                  et.textSize = 15f
+                  et.isSingleLine = true
+                  et.imeOptions = EditorInfo.IME_ACTION_SEARCH
+                  val cnt = tv(this, "0/0", 12f, P.muted)
+                  cnt.setPadding(dp(6), 0, dp(6), 0)
+                  w.setFindListener { active, total, _ -> cnt.text = if (total == 0) "0/0" else "${active + 1}/$total" }
+                  et.addTextChangedListener(object : android.text.TextWatcher {
+                      override fun afterTextChanged(s: android.text.Editable?) {
+                          val q = s?.toString() ?: ""
+                          if (q.isBlank()) { w.clearMatches(); cnt.text = "0/0" } else w.findAllAsync(q)
+                      }
+                      override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                      override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                  })
+                  et.setOnEditorActionListener { _, a, _ -> if (a == EditorInfo.IME_ACTION_SEARCH) { w.findNext(true); true } else false }
+                  bar.addView(et, lp(0, dp(52), 1f))
+                  bar.addView(cnt)
+                  val up = IconView(this, 14); up.color = P.text; up.contentDescription = "Kết quả trước"
+                  up.setOnClickListener { w.findNext(false) }
+                  val dn = IconView(this, 15); dn.color = P.text; dn.contentDescription = "Kết quả sau"
+                  dn.setOnClickListener { w.findNext(true) }
+                  val x = IconView(this, 5); x.color = P.muted; x.contentDescription = "Đóng tìm kiếm"
+                  x.setOnClickListener { closeFind() }
+                  bar.addView(up, lp(dp(40), dp(52)))
+                  bar.addView(dn, lp(dp(40), dp(52)))
+                  bar.addView(x, lp(dp(40), dp(52)))
+                  val p = FrameLayout.LayoutParams(MATCH, dp(52), Gravity.TOP)
+                  p.setMargins(dp(12), dp(10), dp(12), 0)
+                  root.addView(bar, p)
+                  findBar = bar
+                  findWeb = w
+                  et.requestFocus()
+                  et.postDelayed({
+                      try { (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(et, 0) } catch (e: Exception) { }
+                  }, 150)
+              }
+
+              private fun closeFind() {
+                  val b = findBar ?: return
+                  try { (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(b.windowToken, 0) } catch (e: Exception) { }
+                  root.removeView(b)
+                  findBar = null
+                  findWeb?.clearMatches()
+                  findWeb = null
+              }
+
+              private fun toggleDesktop() {
+                  val t = tabs[cur]
+                  val w = t.web ?: return
+                  t.desktop = !t.desktop
+                  w.settings.userAgentString = if (t.desktop) DESKTOP_UA else t.mobileUa
+                  w.settings.useWideViewPort = true
+                  w.settings.loadWithOverviewMode = true
+                  w.reload()
+                  toast(if (t.desktop) "Đang xem bản máy tính" else "Đã về bản di động")
               }
 
               private fun showPill(msg: String, action: String?, onAction: (() -> Unit)?) {
@@ -1617,6 +1852,8 @@ jobs:
                       row("Sao chép liên kết") { copy(t.url) }
                       row("Mở bằng app khác") { openOther(t.url) }
                       row("Video trên trang (${t.media.size})") { openMedia() }
+                      row("Tìm trong trang") { openFind() }
+                      row(if (t.desktop) "Xem bản di động" else "Xem bản máy tính") { toggleDesktop() }
                       row("Làm mới trang") { t.web?.reload() }
                   }
                   row("Yêu thích") { openFavorites() }
@@ -1795,7 +2032,7 @@ jobs:
                           x.setOnClickListener { closeTab(i); render() }
                           hr.addView(x, lp(dp(40), dp(32)))
                           card.addView(hr)
-                          val sub = tv(this, if (t.url.isEmpty()) "Trang chủ Trình Duyệt" else hostOf(t.url), 12f, P.muted)
+                          val sub = tv(this, if (t.url.isEmpty()) "Trang chủ Lướt" else hostOf(t.url), 12f, P.muted)
                           card.addView(sub)
                           val img = ImageView(this)
                           img.scaleType = ImageView.ScaleType.CENTER_CROP
@@ -2026,6 +2263,25 @@ jobs:
                   swRow("Chặn quảng cáo và theo dõi", "Đã chặn $blockedTotal mục tổng cộng", adOn) { Store.setAdOn(this, it); adOn = it }
                   segRow(listOf("Nhẹ", "Vừa", "Mạnh"), adLevel) { Store.setAdLevel(this, it); adLevel = it }
                   body.addView(tv(this, "Nhẹ: chỉ mạng quảng cáo lớn. Vừa: thêm theo dõi và ẩn khung quảng cáo. Mạnh: chặn cả công cụ phân tích, dễ làm hỏng một số trang.", 12f, P.muted))
+                  val fInfo = tv(this, "", 12f, P.muted)
+                  fun fText() {
+                      val n = Store.filterCount(this)
+                      val ts = Store.filterTs(this)
+                      fInfo.text = if (n > 0) "Bộ lọc mở rộng: $n tên miền, cập nhật " + SimpleDateFormat("dd/MM HH:mm", Locale.US).format(Date(ts)) else "Chưa tải bộ lọc mở rộng. Bấm cập nhật để chặn mạnh hơn nhiều."
+                  }
+                  fText()
+                  val fp = lp(MATCH, WRAP); fp.topMargin = dp(12)
+                  body.addView(fInfo, fp)
+                  val fbtn = btn(this, "Cập nhật bộ lọc ngay", P.surface, P.text, P.line) {}
+                  fbtn.setOnClickListener {
+                      fbtn.text = "Đang tải..."
+                      updateFilterAsync { n ->
+                          fbtn.text = "Cập nhật bộ lọc ngay"
+                          if (n > 0) { fText(); toast("Đã cập nhật $n tên miền") } else toast("Không tải được. Kiểm tra mạng rồi thử lại.")
+                      }
+                  }
+                  val fbp = lp(MATCH, WRAP); fbp.topMargin = dp(6)
+                  body.addView(fbtn, fbp)
                   val excBox = LinearLayout(this)
                   excBox.orientation = LinearLayout.VERTICAL
                   fun renderExc() {
@@ -2089,7 +2345,7 @@ jobs:
                   body.addView(clr, cp)
 
                   sec("Trình duyệt mặc định")
-                  body.addView(tv(this, "Đặt Trình Duyệt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Trình Duyệt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
+                  body.addView(tv(this, "Đặt Lướt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Lướt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
                   val dflt = btn(this, "Mở cài đặt ứng dụng mặc định", P.surface, P.text, P.line) {
                       try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { toast("Không mở được cài đặt") }
                   }
@@ -2102,10 +2358,12 @@ jobs:
               @Suppress("OVERRIDE_DEPRECATION")
               override fun onBackPressed() {
                   if (customView != null) { hideCustom(); return }
+                  if (findBar != null) { closeFind(); return }
                   if (overlays.isNotEmpty()) { popOverlay(); return }
                   val t = tabs[cur]
                   val w = t.web
                   if (w != null && w.canGoBack()) { w.goBack(); return }
+                  if (w != null && t.opener != null && tabs.contains(t.opener)) { closeToOpener(t); return }
                   if (w != null) { goHome(); return }
                   if (tabs.size > 1) { closeTab(cur); showTab(); return }
                   super.onBackPressed()
@@ -2431,6 +2689,10 @@ jobs:
               fun popExc(c: Context): MutableSet<String> = HashSet(sp(c).getStringSet("popExc", emptySet()) ?: emptySet())
               fun setPopExc(c: Context, s: Set<String>) = sp(c).edit().putStringSet("popExc", HashSet(s)).apply()
 
+              fun filterTs(c: Context) = sp(c).getLong("filterTs", 0L)
+              fun filterCount(c: Context) = sp(c).getInt("filterCount", 0)
+              fun setFilterInfo(c: Context, ts: Long, n: Int) = sp(c).edit().putLong("filterTs", ts).putInt("filterCount", n).apply()
+
               fun exceptions(c: Context): MutableSet<String> = HashSet(sp(c).getStringSet("exc", emptySet()) ?: emptySet())
               fun setExceptions(c: Context, s: Set<String>) = sp(c).edit().putStringSet("exc", HashSet(s)).apply()
 
@@ -2696,6 +2958,15 @@ jobs:
                           c.drawCircle(cx, cy - 7 * u, 2f * u, p); c.drawCircle(cx, cy, 2f * u, p); c.drawCircle(cx, cy + 7 * u, 2f * u, p)
                       }
                       5 -> { path.moveTo(cx - 5 * u, cy - 5 * u); path.lineTo(cx + 5 * u, cy + 5 * u); path.moveTo(cx + 5 * u, cy - 5 * u); path.lineTo(cx - 5 * u, cy + 5 * u); c.drawPath(path, p) }
+                      13 -> {
+                          p.strokeWidth = 2f * u
+                          c.drawArc(RectF(cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u), -50f, 290f, false, p)
+                          p.style = Paint.Style.FILL
+                          path.moveTo(cx + 3 * u, cy - 12 * u); path.lineTo(cx + 10 * u, cy - 6 * u); path.lineTo(cx + 2 * u, cy - 3 * u); path.close()
+                          c.drawPath(path, p)
+                      }
+                      14 -> { path.moveTo(cx - 6 * u, cy + 3 * u); path.lineTo(cx, cy - 3 * u); path.lineTo(cx + 6 * u, cy + 3 * u); c.drawPath(path, p) }
+                      15 -> { path.moveTo(cx - 6 * u, cy - 3 * u); path.lineTo(cx, cy + 3 * u); path.lineTo(cx + 6 * u, cy - 3 * u); c.drawPath(path, p) }
                       12 -> {
                           for (k in 0 until 10) {
                               val r = if (k % 2 == 0) 10 * u else 4.4f * u
@@ -2826,7 +3097,7 @@ jobs:
           cat > "app/src/main/res/values/strings.xml" <<'AMLICH_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <string name="app_name">Trình Duyệt</string>
+              <string name="app_name">Lướt</string>
           </resources>
           AMLICH_EOF
           cat > "build.gradle" <<'AMLICH_EOF'
