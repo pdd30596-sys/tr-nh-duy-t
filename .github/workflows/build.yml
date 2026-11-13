@@ -1,4 +1,4 @@
-name: Build Luot
+name: Build Trinh Duyet
 
 on:
   push:
@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 5
-                  versionName "1.4"
+                  versionCode 6
+                  versionName "1.5"
               }
 
               signingConfigs {
@@ -662,7 +662,7 @@ jobs:
                       nm.createNotificationChannel(NotificationChannel("dl", "Tải video", NotificationManager.IMPORTANCE_LOW))
                       return Notification.Builder(ctx, "dl")
                           .setSmallIcon(android.R.drawable.stat_sys_download)
-                          .setContentTitle("Lướt đang tải $count video")
+                          .setContentTitle("Trình Duyệt đang tải $count video")
                           .setOngoing(true)
                           .setProgress(100, avg, indeterminate)
                           .build()
@@ -1176,7 +1176,7 @@ jobs:
 
                   val head = LinearLayout(this)
                   head.gravity = Gravity.CENTER_VERTICAL
-                  head.addView(tv(this, "Lướt", 24f, P.text, true), lp(0, WRAP, 1f))
+                  head.addView(tv(this, "Trình Duyệt", 24f, P.text, true), lp(0, WRAP, 1f))
                   val chip = tv(this, "Chặn " + blockedTotal, 13f, P.accent, true)
                   chip.gravity = Gravity.CENTER
                   chip.background = rr(this, P.surface, 18, P.line)
@@ -2032,7 +2032,7 @@ jobs:
                           x.setOnClickListener { closeTab(i); render() }
                           hr.addView(x, lp(dp(40), dp(32)))
                           card.addView(hr)
-                          val sub = tv(this, if (t.url.isEmpty()) "Trang chủ Lướt" else hostOf(t.url), 12f, P.muted)
+                          val sub = tv(this, if (t.url.isEmpty()) "Trang chủ" else hostOf(t.url), 12f, P.muted)
                           card.addView(sub)
                           val img = ImageView(this)
                           img.scaleType = ImageView.ScaleType.CENTER_CROP
@@ -2345,7 +2345,7 @@ jobs:
                   body.addView(clr, cp)
 
                   sec("Trình duyệt mặc định")
-                  body.addView(tv(this, "Đặt Lướt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Lướt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
+                  body.addView(tv(this, "Đặt Trình Duyệt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Trình Duyệt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
                   val dflt = btn(this, "Mở cài đặt ứng dụng mặc định", P.surface, P.text, P.line) {
                       try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { toast("Không mở được cài đặt") }
                   }
@@ -3097,7 +3097,7 @@ jobs:
           cat > "app/src/main/res/values/strings.xml" <<'AMLICH_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <string name="app_name">Lướt</string>
+              <string name="app_name">Trình Duyệt</string>
           </resources>
           AMLICH_EOF
           cat > "build.gradle" <<'AMLICH_EOF'
@@ -3190,5 +3190,5 @@ jobs:
         run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: Luot-apk
+          name: TrinhDuyet-apk
           path: /home/runner/proj/app/build/outputs/apk/debug/app-debug.apk
