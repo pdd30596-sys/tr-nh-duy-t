@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 7
-                  versionName "1.6"
+                  versionCode 8
+                  versionName "1.7"
               }
 
               signingConfigs {
@@ -778,6 +778,7 @@ jobs:
               var popups = 0
               var opener: Tab? = null
               var desktop = false
+              var icon: Bitmap? = null
               var trackers = 0
               var pendingHttp: String? = null
               var mobileUa: String? = null
@@ -1549,6 +1550,8 @@ jobs:
 
                       override fun onReceivedTitle(view: WebView, title: String?) { if (title != null) tab.title = title }
 
+                      override fun onReceivedIcon(view: WebView, icon: Bitmap?) { tab.icon = icon }
+
                       override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
                           val host = hostOf(tab.url)
                           val now = System.currentTimeMillis()
@@ -2209,41 +2212,79 @@ jobs:
                   fun render() {
                       title.text = "${tabs.size} tab"
                       list.removeAllViews()
+                      var row: LinearLayout? = null
                       for (i in tabs.indices) {
-                          val t = tabs[i]
-                          val card = LinearLayout(this)
-                          card.orientation = LinearLayout.VERTICAL
-                          card.background = rr(this, P.surface, 20, if (i == cur) P.accent else P.line)
-                          card.setPadding(dp(14), dp(12), dp(14), dp(12))
-                          val hr = LinearLayout(this)
-                          hr.gravity = Gravity.CENTER_VERTICAL
-                          val tt = tv(this, t.title.ifBlank { "Tab mới" }, 14f, P.text, true)
-                          tt.maxLines = 1; tt.ellipsize = android.text.TextUtils.TruncateAt.END
-                          hr.addView(tt, lp(0, WRAP, 1f))
-                          val x = IconView(this, 5)
-                          x.color = P.muted
-                          x.contentDescription = "Đóng tab"
-                          x.setOnClickListener { closeTab(i); render() }
-                          hr.addView(x, lp(dp(40), dp(32)))
-                          card.addView(hr)
-                          val sub = tv(this, if (t.url.isEmpty()) "Trang chủ" else hostOf(t.url), 12f, P.muted)
-                          card.addView(sub)
-                          val img = ImageView(this)
-                          img.scaleType = ImageView.ScaleType.CENTER_CROP
-                          img.background = rr(this, P.bg, 12)
-                          if (t.thumb != null) img.setImageBitmap(t.thumb)
-                          val ip = lp(MATCH, dp(130)); ip.topMargin = dp(8)
-                          card.addView(img, ip)
-                          card.setOnClickListener { cur = i; popOverlay() }
-                          val cp = lp(MATCH, dp(210))
-                          if (i > 0) cp.topMargin = -dp(110)
-                          card.elevation = dp(4 + i * 2).toFloat()
-                          if (Store.fx3d(this)) {
-                              card.cameraDistance = 9000f * resources.displayMetrics.density
-                              card.pivotY = 0f
-                              card.rotationX = 12f
+                          if (i % 2 == 0) {
+                              row = LinearLayout(this)
+                              row.orientation = LinearLayout.HORIZONTAL
+                              val rp = lp(MATCH, WRAP)
+                              if (i > 0) rp.topMargin = dp(18)
+                              list.addView(row, rp)
                           }
-                          list.addView(card, cp)
+                          val t = tabs[i]
+                          val cell = LinearLayout(this)
+                          cell.orientation = LinearLayout.VERTICAL
+                          val frame = FrameLayout(this)
+                          frame.background = rr(this, P.surface, 18, if (i == cur) P.accent else P.line)
+                          frame.clipToOutline = true
+                          frame.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+                          val letter = hostOf(t.url).removePrefix("www.").take(1).uppercase()
+                          if (t.thumb != null) {
+                              val img = ImageView(this)
+                              img.scaleType = ImageView.ScaleType.CENTER_CROP
+                              img.setImageBitmap(t.thumb)
+                              frame.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+                          } else if (t.url.isEmpty()) {
+                              val hi = IconView(this, 2)
+                              hi.color = P.accent
+                              frame.addView(hi, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER))
+                          } else {
+                              val big = tv(this, letter, 38f, P.accent, true)
+                              big.gravity = Gravity.CENTER
+                              frame.addView(big, FrameLayout.LayoutParams(MATCH, MATCH))
+                          }
+                          val x = IconView(this, 5)
+                          x.color = P.text
+                          x.contentDescription = "Đóng tab"
+                          x.background = rr(this, (P.bg and 0x00FFFFFF) or (0xCC shl 24), 17)
+                          x.setOnClickListener { closeTab(i); render() }
+                          val xp = FrameLayout.LayoutParams(dp(34), dp(34), Gravity.TOP or Gravity.END)
+                          xp.setMargins(0, dp(6), dp(6), 0)
+                          frame.addView(x, xp)
+                          frame.setOnClickListener { cur = i; popOverlay() }
+                          cell.addView(frame, lp(MATCH, dp(190)))
+                          val tr = LinearLayout(this)
+                          tr.gravity = Gravity.CENTER_VERTICAL
+                          tr.setPadding(dp(2), dp(8), dp(2), 0)
+                          val ic = t.icon
+                          if (ic != null) {
+                              val iv = ImageView(this)
+                              iv.scaleType = ImageView.ScaleType.FIT_CENTER
+                              iv.setImageBitmap(ic)
+                              tr.addView(iv, lp(dp(20), dp(20)))
+                          } else if (t.url.isEmpty()) {
+                              val hi = IconView(this, 2)
+                              hi.color = P.accent
+                              tr.addView(hi, lp(dp(20), dp(20)))
+                          } else {
+                              val lc = tv(this, letter, 11f, P.onAccent, true)
+                              lc.gravity = Gravity.CENTER
+                              lc.background = rr(this, P.accent, 10)
+                              tr.addView(lc, lp(dp(20), dp(20)))
+                          }
+                          val nm = tv(this, if (t.url.isEmpty()) "Trang chủ" else t.title.ifBlank { hostOf(t.url) }, 13f, P.text, i == cur)
+                          nm.maxLines = 1
+                          nm.ellipsize = android.text.TextUtils.TruncateAt.END
+                          val np = lp(0, WRAP, 1f); np.leftMargin = dp(8)
+                          tr.addView(nm, np)
+                          cell.addView(tr)
+                          val cp = lp(0, WRAP, 1f)
+                          if (i % 2 == 1) cp.leftMargin = dp(14)
+                          row!!.addView(cell, cp)
+                      }
+                      if (tabs.size % 2 == 1) {
+                          val sp = lp(0, 1, 1f); sp.leftMargin = dp(14)
+                          row!!.addView(View(this), sp)
                       }
                   }
                   render()
@@ -2428,34 +2469,118 @@ jobs:
               }
 
               // ---- cài đặt ----
+              private fun sSec(body: LinearLayout, t: String) {
+                  val x = tv(this, t.uppercase(), 12f, P.muted, true)
+                  x.setPadding(0, dp(20), 0, dp(6))
+                  body.addView(x)
+              }
+
+              private fun sSw(body: LinearLayout, title: String, sub: String, on: Boolean, ch: (Boolean) -> Unit) {
+                  val r = LinearLayout(this)
+                  r.gravity = Gravity.CENTER_VERTICAL
+                  r.minimumHeight = dp(56)
+                  val c = LinearLayout(this)
+                  c.orientation = LinearLayout.VERTICAL
+                  c.addView(tv(this, title, 15f, P.text, true))
+                  c.addView(tv(this, sub, 12f, P.muted))
+                  val cp = lp(0, WRAP, 1f); cp.rightMargin = dp(8)
+                  r.addView(c, cp)
+                  r.addView(styledSwitch(this, on, ch))
+                  body.addView(r, lp(MATCH, WRAP))
+              }
+
+              private fun sSeg(body: LinearLayout, opts: List<String>, sel: Int, ch: (Int) -> Unit) {
+                  val s = segmented(this, opts, sel, ch)
+                  val p = lp(MATCH, WRAP); p.topMargin = dp(4); p.bottomMargin = dp(4)
+                  body.addView(s, p)
+              }
+
+              private fun settingsPage(title: String, fill: (LinearLayout) -> Unit) {
+                  val (f, body) = screen(title)
+                  fill(body)
+                  pushOverlay(f)
+              }
+
               private fun openSettings() {
                   val (f, body) = screen("Cài đặt")
-                  fun sec(t: String) {
-                      val x = tv(this, t.uppercase(), 12f, P.muted, true)
-                      x.setPadding(0, dp(20), 0, dp(6))
-                      body.addView(x)
+                  val cats = listOf(
+                      Triple(20, "Giao diện", "Chủ đề, cỡ chữ, hiệu ứng 3D"),
+                      Triple(16, "Chung", "Tìm kiếm, trình duyệt mặc định"),
+                      Triple(17, "Quảng cáo", "Chặn quảng cáo, popup"),
+                      Triple(18, "Bảo mật", "Chống theo dõi, riêng tư"),
+                      Triple(19, "Giới thiệu", "Phiên bản và tính năng")
+                  )
+                  var row: LinearLayout? = null
+                  for (i in cats.indices) {
+                      if (i % 2 == 0) {
+                          row = LinearLayout(this)
+                          row.orientation = LinearLayout.HORIZONTAL
+                          val rp = lp(MATCH, WRAP); rp.topMargin = dp(14)
+                          body.addView(row, rp)
+                      }
+                      val c = cats[i]
+                      val tile = LinearLayout(this)
+                      tile.orientation = LinearLayout.VERTICAL
+                      tile.gravity = Gravity.CENTER_HORIZONTAL
+                      tile.background = rr(this, P.surface, 20, P.line)
+                      tile.setPadding(dp(12), dp(20), dp(12), dp(18))
+                      val ic = IconView(this, c.first)
+                      ic.color = P.accent
+                      ic.background = rr(this, (P.accent and 0x00FFFFFF) or (0x22 shl 24), 28)
+                      tile.addView(ic, lp(dp(56), dp(56)))
+                      val nm = tv(this, c.second, 16f, P.text, true)
+                      nm.gravity = Gravity.CENTER
+                      val np = lp(MATCH, WRAP); np.topMargin = dp(12)
+                      tile.addView(nm, np)
+                      val sb = tv(this, c.third, 12f, P.muted)
+                      sb.gravity = Gravity.CENTER
+                      val sp = lp(MATCH, WRAP); sp.topMargin = dp(2)
+                      tile.addView(sb, sp)
+                      tile.minimumHeight = dp(150)
+                      tile.setOnClickListener {
+                          when (i) {
+                              0 -> settingsLook()
+                              1 -> settingsGeneral()
+                              2 -> settingsAds()
+                              3 -> settingsPrivacy()
+                              else -> settingsAbout()
+                          }
+                      }
+                      val tp = lp(0, WRAP, 1f)
+                      if (i % 2 == 1) tp.leftMargin = dp(14)
+                      row!!.addView(tile, tp)
                   }
-                  fun swRow(title: String, sub: String, on: Boolean, ch: (Boolean) -> Unit) {
-                      val r = LinearLayout(this)
-                      r.gravity = Gravity.CENTER_VERTICAL
-                      r.minimumHeight = dp(56)
-                      val c = LinearLayout(this)
-                      c.orientation = LinearLayout.VERTICAL
-                      c.addView(tv(this, title, 15f, P.text, true))
-                      c.addView(tv(this, sub, 12f, P.muted))
-                      r.addView(c, lp(0, WRAP, 1f))
-                      r.addView(styledSwitch(this, on, ch))
-                      body.addView(r, lp(MATCH, WRAP))
-                  }
-                  fun segRow(opts: List<String>, sel: Int, ch: (Int) -> Unit) {
-                      val s = segmented(this, opts, sel, ch)
-                      val p = lp(MATCH, WRAP); p.topMargin = dp(4); p.bottomMargin = dp(4)
-                      body.addView(s, p)
-                  }
+                  if (cats.size % 2 == 1) { val spc = lp(0, 1, 1f); spc.leftMargin = dp(14); row!!.addView(View(this), spc) }
+                  pushOverlay(f)
+              }
 
-                  sec("Chặn quảng cáo")
-                  swRow("Chặn quảng cáo và theo dõi", "Đã chặn $blockedTotal mục tổng cộng", adOn) { Store.setAdOn(this, it); adOn = it }
-                  segRow(listOf("Nhẹ", "Vừa", "Mạnh"), adLevel) { Store.setAdLevel(this, it); adLevel = it }
+              private fun settingsLook() = settingsPage("Giao diện") { body ->
+                  sSec(body, "Giao diện")
+                  val zb = btn(this, "Chỉnh cỡ chữ trang web (${Store.textZoom(this)}%)", P.surface, P.text, P.line) { openTextSize() }
+                  val zp = lp(MATCH, WRAP); zp.topMargin = dp(4); zp.bottomMargin = dp(8)
+                  body.addView(zb, zp)
+                  sSeg(body, listOf("Sáng", "Tối", "Hệ thống"), Store.theme(this)) { Store.setTheme(this, it); saveTabs(); recreate() }
+                  sSw(body, "Hiệu ứng 3D", "Bong bóng video xoay nghiêng 3D. Tắt nếu máy chậm.", fx3d) { Store.setFx3d(this, it); fx3d = it }
+
+              }
+
+              private fun settingsGeneral() = settingsPage("Chung") { body ->
+                  sSec(body, "Công cụ tìm kiếm")
+                  sSeg(body, listOf("Google", "Bing", "DuckDuckGo"), Store.engine(this)) { Store.setEngine(this, it) }
+
+                  sSec(body, "Trình duyệt mặc định")
+                  body.addView(tv(this, "Đặt Trình Duyệt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Trình Duyệt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
+                  val dflt = btn(this, "Mở cài đặt ứng dụng mặc định", P.surface, P.text, P.line) {
+                      try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { toast("Không mở được cài đặt") }
+                  }
+                  val dp2 = lp(MATCH, WRAP); dp2.topMargin = dp(8)
+                  body.addView(dflt, dp2)
+              }
+
+              private fun settingsAds() = settingsPage("Quảng cáo") { body ->
+                  sSec(body, "Chặn quảng cáo")
+                  sSw(body, "Chặn quảng cáo và theo dõi", "Đã chặn $blockedTotal mục tổng cộng", adOn) { Store.setAdOn(this, it); adOn = it }
+                  sSeg(body, listOf("Nhẹ", "Vừa", "Mạnh"), adLevel) { Store.setAdLevel(this, it); adLevel = it }
                   body.addView(tv(this, "Nhẹ: chỉ mạng quảng cáo lớn. Vừa: thêm theo dõi và ẩn khung quảng cáo. Mạnh: chặn cả công cụ phân tích, dễ làm hỏng một số trang.", 12f, P.muted))
                   val fInfo = tv(this, "", 12f, P.muted)
                   fun fText() {
@@ -2497,19 +2622,8 @@ jobs:
                   renderExc()
                   body.addView(excBox)
 
-                  sec("Chống theo dõi và rò rỉ dữ liệu")
-                  swRow("Chặn bộ theo dõi", "Chặn Google Analytics, pixel theo dõi, đo lường hành vi", trackOn) { Store.setFlag(this, "trackOn", it); trackOn = it }
-                  swRow("Chặn cookie bên thứ ba", "Ngăn quảng cáo theo bạn qua nhiều trang. Có thể làm hỏng một số khung đăng nhập nhúng", tpcBlock) { Store.setFlag(this, "tpc", it); tpcBlock = it }
-                  swRow("Xóa mã theo dõi khỏi liên kết", "Bỏ utm_, fbclid, gclid... khi mở, sao chép và chia sẻ link", cleanLinks) { Store.setFlag(this, "cleanLinks", it); cleanLinks = it }
-                  swRow("Chặn rò rỉ IP qua WebRTC", "Ngăn trang lấy địa chỉ IP thật. Tắt nếu cần gọi video trên web", webrtcBlock) { Store.setFlag(this, "webrtc", it); webrtcBlock = it }
-                  swRow("Tín hiệu Đừng theo dõi", "Gửi DNT/GPC và hạn chế thông tin trang nguồn (Referer) gửi đi", dnt) { Store.setFlag(this, "dnt", it); dnt = it }
-                  swRow("Ưu tiên HTTPS", "Tự chuyển http sang https, nếu trang không hỗ trợ sẽ quay lại http", httpsOnly) { Store.setFlag(this, "https", it); httpsOnly = it }
-                  swRow("Chống vân tay trình duyệt (thử nghiệm)", "Làm nhiễu canvas và thông số máy. Có thể làm lỗi vài trang", fp) { Store.setFlag(this, "fp", it); fp = it }
-                  swRow("Tự xóa cookie khi đóng app", "Đóng hẳn app sẽ xóa cookie và dữ liệu trang", Store.flag(this, "wipe", false)) { Store.setFlag(this, "wipe", it) }
-                  body.addView(tv(this, "Ghi chú: các lớp bảo vệ bằng JavaScript chỉ chạy sau khi trang bắt đầu tải nên không tuyệt đối. Trang bị lỗi thì tắt chặn riêng trang đó bằng nút Chặn trên thanh địa chỉ. Quyền vị trí, camera, micro của trang luôn bị từ chối.", 12f, P.muted))
-
-                  sec("Cửa sổ bật lên")
-                  swRow("Chặn popup và tự mở tab mới", "Chặn trang tự mở tab, cửa sổ quảng cáo hoặc tự mở app khác khi bạn chưa bấm", popupBlock) { Store.setPopupBlock(this, it); popupBlock = it }
+                  sSec(body, "Cửa sổ bật lên")
+                  sSw(body, "Chặn popup và tự mở tab mới", "Chặn trang tự mở tab, cửa sổ quảng cáo hoặc tự mở app khác khi bạn chưa bấm", popupBlock) { Store.setPopupBlock(this, it); popupBlock = it }
                   val popBox = LinearLayout(this)
                   popBox.orientation = LinearLayout.VERTICAL
                   fun renderPop() {
@@ -2531,18 +2645,22 @@ jobs:
                   renderPop()
                   body.addView(popBox)
 
-                  sec("Giao diện")
-                  val zb = btn(this, "Chỉnh cỡ chữ trang web (${Store.textZoom(this)}%)", P.surface, P.text, P.line) { openTextSize() }
-                  val zp = lp(MATCH, WRAP); zp.topMargin = dp(4); zp.bottomMargin = dp(8)
-                  body.addView(zb, zp)
-                  segRow(listOf("Sáng", "Tối", "Hệ thống"), Store.theme(this)) { Store.setTheme(this, it); saveTabs(); recreate() }
-                  swRow("Hiệu ứng 3D", "Bong bóng xoay và tab xếp lớp. Tắt nếu máy chậm.", fx3d) { Store.setFx3d(this, it); fx3d = it }
+              }
 
-                  sec("Công cụ tìm kiếm")
-                  segRow(listOf("Google", "Bing", "DuckDuckGo"), Store.engine(this)) { Store.setEngine(this, it) }
+              private fun settingsPrivacy() = settingsPage("Bảo mật") { body ->
+                  sSec(body, "Chống theo dõi và rò rỉ dữ liệu")
+                  sSw(body, "Chặn bộ theo dõi", "Chặn Google Analytics, pixel theo dõi, đo lường hành vi", trackOn) { Store.setFlag(this, "trackOn", it); trackOn = it }
+                  sSw(body, "Chặn cookie bên thứ ba", "Ngăn quảng cáo theo bạn qua nhiều trang. Có thể làm hỏng một số khung đăng nhập nhúng", tpcBlock) { Store.setFlag(this, "tpc", it); tpcBlock = it }
+                  sSw(body, "Xóa mã theo dõi khỏi liên kết", "Bỏ utm_, fbclid, gclid... khi mở, sao chép và chia sẻ link", cleanLinks) { Store.setFlag(this, "cleanLinks", it); cleanLinks = it }
+                  sSw(body, "Chặn rò rỉ IP qua WebRTC", "Ngăn trang lấy địa chỉ IP thật. Tắt nếu cần gọi video trên web", webrtcBlock) { Store.setFlag(this, "webrtc", it); webrtcBlock = it }
+                  sSw(body, "Tín hiệu Đừng theo dõi", "Gửi DNT/GPC và hạn chế thông tin trang nguồn (Referer) gửi đi", dnt) { Store.setFlag(this, "dnt", it); dnt = it }
+                  sSw(body, "Ưu tiên HTTPS", "Tự chuyển http sang https, nếu trang không hỗ trợ sẽ quay lại http", httpsOnly) { Store.setFlag(this, "https", it); httpsOnly = it }
+                  sSw(body, "Chống vân tay trình duyệt (thử nghiệm)", "Làm nhiễu canvas và thông số máy. Có thể làm lỗi vài trang", fp) { Store.setFlag(this, "fp", it); fp = it }
+                  sSw(body, "Tự xóa cookie khi đóng app", "Đóng hẳn app sẽ xóa cookie và dữ liệu trang", Store.flag(this, "wipe", false)) { Store.setFlag(this, "wipe", it) }
+                  body.addView(tv(this, "Ghi chú: các lớp bảo vệ bằng JavaScript chỉ chạy sau khi trang bắt đầu tải nên không tuyệt đối. Trang bị lỗi thì tắt chặn riêng trang đó bằng nút Chặn trên thanh địa chỉ. Quyền vị trí, camera, micro của trang luôn bị từ chối.", 12f, P.muted))
 
-                  sec("Riêng tư")
-                  swRow("Lưu lịch sử xem", "Tắt thì trang mới không được ghi lại", Store.saveHist(this)) { Store.setSaveHist(this, it) }
+                  sSec(body, "Riêng tư")
+                  sSw(body, "Lưu lịch sử xem", "Tắt thì trang mới không được ghi lại", Store.saveHist(this)) { Store.setSaveHist(this, it) }
                   val clr = btn(this, "Xóa cookie, bộ nhớ đệm và lịch sử", P.surface, P.text, P.line) {
                       CookieManager.getInstance().removeAllCookies(null)
                       WebStorage.getInstance().deleteAllData()
@@ -2553,14 +2671,19 @@ jobs:
                   val cp = lp(MATCH, WRAP); cp.topMargin = dp(8)
                   body.addView(clr, cp)
 
-                  sec("Trình duyệt mặc định")
-                  body.addView(tv(this, "Đặt Trình Duyệt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Trình Duyệt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
-                  val dflt = btn(this, "Mở cài đặt ứng dụng mặc định", P.surface, P.text, P.line) {
-                      try { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) } catch (e: Exception) { toast("Không mở được cài đặt") }
-                  }
-                  val dp2 = lp(MATCH, WRAP); dp2.topMargin = dp(8)
-                  body.addView(dflt, dp2)
-                  pushOverlay(f)
+              }
+
+              private fun settingsAbout() = settingsPage("Giới thiệu") { body ->
+                  val ver = try { packageManager.getPackageInfo(packageName, 0).versionName } catch (e: Exception) { "" }
+                  body.addView(tv(this, "Trình Duyệt", 24f, P.text, true))
+                  body.addView(tv(this, "Phiên bản $ver", 13f, P.muted))
+                  val d = tv(this, "Trình duyệt web gọn nhẹ: chặn quảng cáo và popup, chống theo dõi, bắt và tải video (mp4, m3u8), trình phát riêng, tab dạng lưới, yêu thích, lịch sử, tìm trong trang, dịch trang, xem bản máy tính, giao diện sáng tối.", 14f, P.text)
+                  d.setLineSpacing(0f, 1.2f)
+                  val dp0 = lp(MATCH, WRAP); dp0.topMargin = dp(16)
+                  body.addView(d, dp0)
+                  val n = tv(this, "Video có bảo vệ bản quyền (DRM), luồng trực tiếp và định dạng DASH không tải được. Chỉ tải nội dung bạn có quyền sử dụng.", 12f, P.muted)
+                  val np = lp(MATCH, WRAP); np.topMargin = dp(16)
+                  body.addView(n, np)
               }
 
               // ================= nút Back =================
@@ -3175,6 +3298,41 @@ jobs:
                           c.drawCircle(cx, cy - 7 * u, 2f * u, p); c.drawCircle(cx, cy, 2f * u, p); c.drawCircle(cx, cy + 7 * u, 2f * u, p)
                       }
                       5 -> { path.moveTo(cx - 5 * u, cy - 5 * u); path.lineTo(cx + 5 * u, cy + 5 * u); path.moveTo(cx + 5 * u, cy - 5 * u); path.lineTo(cx - 5 * u, cy + 5 * u); c.drawPath(path, p) }
+                      16 -> {
+                          c.drawCircle(cx, cy, 4 * u, p)
+                          for (k in 0 until 8) {
+                              val ang = Math.PI / 4 * k
+                              c.drawLine(cx + (7 * u * Math.cos(ang)).toFloat(), cy + (7 * u * Math.sin(ang)).toFloat(), cx + (10.5f * u * Math.cos(ang)).toFloat(), cy + (10.5f * u * Math.sin(ang)).toFloat(), p)
+                          }
+                          c.drawCircle(cx, cy, 7 * u, p)
+                      }
+                      17 -> {
+                          path.moveTo(cx, cy - 10 * u); path.lineTo(cx + 9 * u, cy - 6 * u); path.lineTo(cx + 9 * u, cy + 1 * u)
+                          path.quadTo(cx + 8 * u, cy + 8 * u, cx, cy + 11 * u); path.quadTo(cx - 8 * u, cy + 8 * u, cx - 9 * u, cy + 1 * u)
+                          path.lineTo(cx - 9 * u, cy - 6 * u); path.close()
+                          c.drawPath(path, p)
+                          c.drawLine(cx - 3.5f * u, cy + 0.5f * u, cx - 0.5f * u, cy + 3.5f * u, p)
+                          c.drawLine(cx - 0.5f * u, cy + 3.5f * u, cx + 4 * u, cy - 2.5f * u, p)
+                      }
+                      18 -> {
+                          c.drawRoundRect(RectF(cx - 8 * u, cy - 2 * u, cx + 8 * u, cy + 9 * u), 3 * u, 3 * u, p)
+                          c.drawArc(RectF(cx - 5 * u, cy - 10 * u, cx + 5 * u, cy), 180f, 180f, false, p)
+                          p.style = Paint.Style.FILL
+                          c.drawCircle(cx, cy + 3.5f * u, 1.6f * u, p)
+                      }
+                      19 -> {
+                          c.drawCircle(cx, cy, 10 * u, p)
+                          p.style = Paint.Style.FILL
+                          c.drawCircle(cx, cy - 4.5f * u, 1.4f * u, p)
+                          c.drawRoundRect(RectF(cx - 1.2f * u, cy - 1.5f * u, cx + 1.2f * u, cy + 6 * u), 1 * u, 1 * u, p)
+                      }
+                      20 -> {
+                          c.drawCircle(cx, cy, 4.5f * u, p)
+                          for (k in 0 until 8) {
+                              val ang = Math.PI / 4 * k
+                              c.drawLine(cx + (7.5f * u * Math.cos(ang)).toFloat(), cy + (7.5f * u * Math.sin(ang)).toFloat(), cx + (10.5f * u * Math.cos(ang)).toFloat(), cy + (10.5f * u * Math.sin(ang)).toFloat(), p)
+                          }
+                      }
                       13 -> {
                           p.strokeWidth = 2f * u
                           c.drawArc(RectF(cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u), -50f, 290f, false, p)
