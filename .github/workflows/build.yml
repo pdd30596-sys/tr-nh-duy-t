@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 6
-                  versionName "1.5"
+                  versionCode 7
+                  versionName "1.6"
               }
 
               signingConfigs {
@@ -220,6 +220,13 @@ jobs:
                   "fullstory.com", "mouseflow.com", "crazyegg.com", "optimizely.com", "newrelic.com", "nr-data.net"
               )
 
+              // Bộ theo dõi (chống theo dõi): trừ SDK đăng nhập/tính năng có thể làm hỏng trang
+              private val trk: HashSet<String> by lazy {
+                  val s = HashSet<String>(mid)
+                  for (d in strong) if (d != "connect.facebook.net" && d != "optimizely.com" && d != "newrelic.com" && d != "nr-data.net") s.add(d)
+                  s
+              }
+
               private val badPaths = listOf(
                   "/pagead/", "/adserver", "/ads/", "/adframe", "adsbygoogle", "/popunder", "/prebid", "/advert/", "/banners/ad"
               )
@@ -232,6 +239,32 @@ jobs:
                       if (i < 0) return false
                       x = x.substring(i + 1)
                   }
+              }
+
+              /** 0: cho qua, 1: quảng cáo, 2: bộ theo dõi. level < 0: tắt chặn quảng cáo. */
+              fun classify(url: String, level: Int, track: Boolean): Int {
+                  val host = try { Uri.parse(url).host?.lowercase() } catch (e: Exception) { null } ?: return 0
+                  if (track && hostMatch(host, trk)) return 2
+                  if (level >= 0 && hostMatch(host, base)) return 1
+                  if (level >= 1 && (hostMatch(host, mid) || hostMatch(host, extra))) return 1
+                  if (level >= 2) {
+                      if (hostMatch(host, strong)) return 1
+                      val l = url.lowercase()
+                      for (p in badPaths) if (l.contains(p)) return 1
+                  }
+                  return 0
+              }
+
+              fun privacyJs(webrtc: Boolean, dnt: Boolean, fp: Boolean): String {
+                  if (!webrtc && !dnt && !fp) return ""
+                  val sb = StringBuilder("(function(){try{if(window.__luotp)return;window.__luotp=1;")
+                  if (webrtc) sb.append("['RTCPeerConnection','webkitRTCPeerConnection','mozRTCPeerConnection','RTCDataChannel'].forEach(function(n){try{Object.defineProperty(window,n,{value:undefined,configurable:true});}catch(e){}});")
+                  if (dnt) sb.append("try{Object.defineProperty(navigator,'doNotTrack',{get:function(){return '1';}});Object.defineProperty(navigator,'globalPrivacyControl',{get:function(){return true;}});}catch(e){}")
+                  if (dnt) sb.append("try{var m=document.createElement('meta');m.name='referrer';m.content='strict-origin-when-cross-origin';(document.head||document.documentElement).appendChild(m);}catch(e){}")
+                  if (fp) sb.append("try{var tdu=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(){try{var c=this.getContext('2d');if(c&&this.width>0&&this.height>0&&this.width*this.height<4000000){var d=c.getImageData(0,0,1,1);d.data[0]=(d.data[0]+1)&255;c.putImageData(d,0,0);}}catch(e){}return tdu.apply(this,arguments);};}catch(e){}" +
+                      "try{Object.defineProperty(navigator,'hardwareConcurrency',{get:function(){return 4;}});Object.defineProperty(navigator,'deviceMemory',{get:function(){return 4;}});}catch(e){}")
+                  sb.append("}catch(e){}})();")
+                  return sb.toString()
               }
 
               fun shouldBlock(url: String, level: Int): Boolean {
@@ -745,6 +778,8 @@ jobs:
               var popups = 0
               var opener: Tab? = null
               var desktop = false
+              var trackers = 0
+              var pendingHttp: String? = null
               var mobileUa: String? = null
               @Volatile var lastTouch = 0L
           }
@@ -780,6 +815,15 @@ jobs:
               @Volatile private var popupBlock = true
               @Volatile private var popExc: Set<String> = emptySet()
               private var lastWindowTs = 0L
+              @Volatile private var trackOn = true
+              @Volatile private var tpcBlock = true
+              @Volatile private var cleanLinks = true
+              @Volatile private var webrtcBlock = true
+              @Volatile private var dnt = true
+              @Volatile private var httpsOnly = true
+              @Volatile private var fp = false
+              private val httpFail = HashSet<String>()
+              private val trackParams = hashSetOf("fbclid", "gclid", "gbraid", "wbraid", "dclid", "msclkid", "yclid", "mc_eid", "mc_cid", "igshid", "_hsenc", "_hsmi", "mkt_tok", "ref_src", "spm", "vero_id", "twclid", "ttclid", "li_fat_id")
               private var pill: TextView? = null
               private var findBar: LinearLayout? = null
               private var findWeb: WebView? = null
@@ -803,7 +847,32 @@ jobs:
                   fx3d = Store.fx3d(this)
                   popupBlock = Store.popupBlock(this)
                   popExc = Store.popExc(this)
+                  trackOn = Store.flag(this, "trackOn", true)
+                  tpcBlock = Store.flag(this, "tpc", true)
+                  cleanLinks = Store.flag(this, "cleanLinks", true)
+                  webrtcBlock = Store.flag(this, "webrtc", true)
+                  dnt = Store.flag(this, "dnt", true)
+                  httpsOnly = Store.flag(this, "https", true)
+                  fp = Store.flag(this, "fp", false)
               }
+
+              private fun cleanUrl(url: String): String {
+                  return try {
+                      val u = Uri.parse(url)
+                      val q = u.encodedQuery ?: return url
+                      val parts = q.split("&")
+                      val keep = parts.filter { val k = it.substringBefore('=').lowercase(); !(trackParams.contains(k) || k.startsWith("utm_")) }
+                      if (keep.size == parts.size) return url
+                      u.buildUpon().encodedQuery(if (keep.isEmpty()) null else keep.joinToString("&")).build().toString()
+                  } catch (e: Exception) { url }
+              }
+
+              private fun injectGuards(view: WebView, url: String) {
+                  if (exc.contains(hostOf(url))) return
+                  val js = (if (popupBlock) AdBlock.guardJs() else "") + AdBlock.privacyJs(webrtcBlock, dnt, fp)
+                  if (js.isNotEmpty()) view.evaluateJavascript(js, null)
+              }
+
 
               @Suppress("DEPRECATION")
               override fun onCreate(savedInstanceState: Bundle?) {
@@ -875,6 +944,9 @@ jobs:
               }
 
               override fun onDestroy() {
+                  if (isFinishing && Store.flag(this, "wipe", false)) {
+                      try { CookieManager.getInstance().removeAllCookies(null); WebStorage.getInstance().deleteAllData() } catch (e: Exception) { }
+                  }
                   Downloader.onChange = null
                   for (t in tabs) { t.web?.destroy(); t.web = null }
                   super.onDestroy()
@@ -1134,8 +1206,9 @@ jobs:
 
               private fun updateShield() {
                   val t = tabs[cur]
-                  shieldChip.text = if (adOn && !exc.contains(hostOf(t.url))) "Chặn ${t.blocked}" else "Chặn tắt"
-                  shieldChip.setTextColor(if (adOn && !exc.contains(hostOf(t.url))) P.accent else P.muted)
+                  val on = (adOn || trackOn) && !exc.contains(hostOf(t.url))
+                  shieldChip.text = if (on) "Chặn ${t.blocked}" else "Chặn tắt"
+                  shieldChip.setTextColor(if (on) P.accent else P.muted)
               }
 
               private fun updateBubble() {
@@ -1341,18 +1414,23 @@ jobs:
                   s.allowFileAccess = false
                   if (Build.VERSION.SDK_INT >= 33) s.isAlgorithmicDarkeningAllowed = P.dark
                   tab.mobileUa = s.userAgentString
+                  s.textZoom = Store.textZoom(this)
+                  if (Build.VERSION.SDK_INT >= 26) s.setSafeBrowsingEnabled(true)
                   w.setBackgroundColor(P.bg)
                   CookieManager.getInstance().setAcceptCookie(true)
-                  CookieManager.getInstance().setAcceptThirdPartyCookies(w, true)
+                  CookieManager.getInstance().setAcceptThirdPartyCookies(w, !tpcBlock)
 
                   w.webViewClient = object : WebViewClient() {
                       override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
                           val url = req.url.toString()
                           val t = tab
-                          if (adOn && !req.isForMainFrame && !exc.contains(hostOf(t.url)) && AdBlock.shouldBlock(url, adLevel)) {
-                              blockedTotal++
-                              main.post { t.blocked++; if (tabs.getOrNull(cur) === t) updateShield() }
-                              return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+                          if ((adOn || trackOn) && !req.isForMainFrame && !exc.contains(hostOf(t.url))) {
+                              val k = AdBlock.classify(url, if (adOn) adLevel else -1, trackOn)
+                              if (k != 0) {
+                                  blockedTotal++
+                                  main.post { t.blocked++; if (k == 2) t.trackers++; if (tabs.getOrNull(cur) === t) updateShield() }
+                                  return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+                              }
                           }
                           sniff(t, url)
                           return null
@@ -1366,6 +1444,22 @@ jobs:
                                   if (tab.opener != null && tab.url.isEmpty()) main.post { closeToOpener(tab) }
                                   else if (tabs.getOrNull(cur) === tab) showPill("Đã chặn trang quảng cáo tự chuyển", null, null)
                                   return true
+                              }
+                              if (req.isForMainFrame && req.method == "GET") {
+                                  val ph = tab.pendingHttp
+                                  if (ph != null && u.startsWith("http://") && hostOf(ph) == hostOf(u)) { httpFail.add(hostOf(u)); tab.pendingHttp = null }
+                                  if (httpsOnly && u.startsWith("http://") && !exc.contains(hostOf(tab.url))) {
+                                      val h = hostOf(u)
+                                      if (h.contains('.') && !h.endsWith(".local") && !Regex("^(\\d+\\.){3}\\d+$").matches(h) && !httpFail.contains(h)) {
+                                          tab.pendingHttp = u
+                                          view.loadUrl("https://" + u.removePrefix("http://"))
+                                          return true
+                                      }
+                                  }
+                                  if (cleanLinks && !isTranslated(u)) {
+                                      val c = cleanUrl(u)
+                                      if (c != u) { view.loadUrl(c); return true }
+                                  }
                               }
                               return false
                           }
@@ -1391,7 +1485,9 @@ jobs:
                           tab.media.clear()
                           tab.blocked = 0
                           tab.popups = 0
-                          if (popupBlock) view.evaluateJavascript(AdBlock.guardJs(), null)
+                          tab.trackers = 0
+                          injectGuards(view, url)
+                          CookieManager.getInstance().setAcceptThirdPartyCookies(view, !(tpcBlock && !exc.contains(hostOf(url))))
                           if (tabs.getOrNull(cur) === tab) {
                               if (!urlEdit.hasFocus()) urlEdit.setText(url)
                               updateShield(); updateBubble(); updateNav()
@@ -1402,7 +1498,8 @@ jobs:
                           tab.url = url
                           tab.title = view.title ?: url
                           if (Store.saveHist(this@MainActivity) && url.startsWith("http")) Store.addHistory(this@MainActivity, tab.title, url)
-                          if (popupBlock) view.evaluateJavascript(AdBlock.guardJs(), null)
+                          tab.pendingHttp = null
+                          injectGuards(view, url)
                           if (adOn && !exc.contains(hostOf(url))) view.evaluateJavascript(AdBlock.cosmeticJs(adLevel), null)
                           scanVideos(tab)
                           main.postDelayed({ scanVideos(tab) }, 3000)
@@ -1414,8 +1511,24 @@ jobs:
                           if (tabs.getOrNull(cur) === tab) { if (!urlEdit.hasFocus()) urlEdit.setText(url); updateNav() }
                       }
 
+                      override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
+                          handler.cancel()
+                          val pend = tab.pendingHttp
+                          if (pend != null && error.url.startsWith("https://")) {
+                              httpFail.add(hostOf(pend)); tab.pendingHttp = null
+                              view.loadUrl(pend)
+                          }
+                      }
+
                       override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
                           if (!req.isForMainFrame) return
+                          if (req.url.scheme == "https" && httpFail.contains(hostOf(req.url.toString())) && tab.url.startsWith("http://")) return
+                          val pend = tab.pendingHttp
+                          if (pend != null && req.url.toString().startsWith("https://")) {
+                              httpFail.add(hostOf(pend)); tab.pendingHttp = null
+                              view.loadUrl(pend)
+                              return
+                          }
                           val bg = String.format("#%06X", 0xFFFFFF and P.bg)
                           val fg = String.format("#%06X", 0xFFFFFF and P.text)
                           val html = "<html><body style='background:$bg;color:$fg;font-family:sans-serif;padding:32px'>" +
@@ -1428,7 +1541,7 @@ jobs:
                       override fun onProgressChanged(view: WebView, p: Int) {
                           tab.progress = p
                           if (p in 20..60) {
-                              if (popupBlock) view.evaluateJavascript(AdBlock.guardJs(), null)
+                              injectGuards(view, tab.url)
                               if (adOn && !exc.contains(hostOf(tab.url))) view.evaluateJavascript(AdBlock.cosmeticJs(adLevel), null)
                           }
                           if (tabs.getOrNull(cur) === tab) progressBar.scaleX = if (p in 1..99) p / 100f else 0f
@@ -1626,6 +1739,83 @@ jobs:
                   findBar = null
                   findWeb?.clearMatches()
                   findWeb = null
+              }
+
+              // ---- cỡ chữ ----
+              private fun applyZoom(z: Int) {
+                  Store.setTextZoom(this, z)
+                  for (t in tabs) t.web?.settings?.textZoom = z
+              }
+
+              private fun openTextSize() {
+                  val (f, panel, _) = sheet()
+                  panel.addView(tv(this, "Cỡ chữ trang web", 20f, P.text, true))
+                  val row = LinearLayout(this)
+                  row.gravity = Gravity.CENTER_VERTICAL
+                  val label = tv(this, "", 22f, P.text, true)
+                  label.gravity = Gravity.CENTER
+                  fun upd() { label.text = Store.textZoom(this).toString() + "%" }
+                  upd()
+                  val minus = btn(this, "A-", P.bg, P.text, P.line) { applyZoom((Store.textZoom(this) - 10).coerceAtLeast(50)); upd() }
+                  val plus = btn(this, "A+", P.bg, P.text, P.line) { applyZoom((Store.textZoom(this) + 10).coerceAtMost(250)); upd() }
+                  row.addView(minus, lp(dp(80), dp(52)))
+                  row.addView(label, lp(0, WRAP, 1f))
+                  row.addView(plus, lp(dp(80), dp(52)))
+                  val rp = lp(MATCH, WRAP); rp.topMargin = dp(16)
+                  panel.addView(row, rp)
+                  val reset = btn(this, "Về mặc định (100%)", P.surface, P.text, P.line) { applyZoom(100); upd() }
+                  val resp = lp(MATCH, WRAP); resp.topMargin = dp(12)
+                  panel.addView(reset, resp)
+                  val done = btn(this, "Xong", P.accent, P.onAccent, 0) { popOverlay() }
+                  val dp2 = lp(MATCH, WRAP); dp2.topMargin = dp(8)
+                  panel.addView(done, dp2)
+                  pushOverlay(f)
+              }
+
+              // ---- dịch trang ----
+              private val transNames = arrayOf("Tiếng Việt", "English", "中文", "日本語", "한국어", "Français", "Español", "Deutsch")
+              private val transCodes = arrayOf("vi", "en", "zh-CN", "ja", "ko", "fr", "es", "de")
+
+              private fun isTranslated(url: String) = hostOf(url).endsWith(".translate.goog")
+
+              private fun translateUrl(url: String, lang: String): String? {
+                  return try {
+                      val u = Uri.parse(url)
+                      val host = u.host ?: return null
+                      if (u.port != -1 || (u.scheme != "http" && u.scheme != "https")) return null
+                      val th = host.replace("-", "--").replace(".", "-") + ".translate.goog"
+                      val path = u.encodedPath ?: "/"
+                      val q = u.encodedQuery
+                      "https://" + th + path + (if (q != null) "?$q&" else "?") + "_x_tr_sl=auto&_x_tr_tl=$lang&_x_tr_hl=$lang&_x_tr_pto=wapp"
+                  } catch (e: Exception) { null }
+              }
+
+              private fun originalUrl(url: String): String? {
+                  return try {
+                      val u = Uri.parse(url)
+                      val h = u.host ?: return null
+                      if (!h.endsWith(".translate.goog")) return null
+                      val oh = h.removeSuffix(".translate.goog").replace("--", "\u0000").replace("-", ".").replace("\u0000", "-")
+                      val q = (u.encodedQuery ?: "").split("&").filter { it.isNotEmpty() && !it.startsWith("_x_tr_") }.joinToString("&")
+                      "https://" + oh + (u.encodedPath ?: "/") + (if (q.isNotEmpty()) "?$q" else "")
+                  } catch (e: Exception) { null }
+              }
+
+              private fun translateDialog() {
+                  val t = tabs[cur]
+                  if (t.web == null || t.url.isEmpty()) return
+                  dlg().setTitle("Dịch trang sang").setItems(transNames) { _, i ->
+                      Store.setTransLang(this, i)
+                      val base = originalUrl(t.url) ?: t.url
+                      val tu = translateUrl(base, transCodes[i])
+                      if (tu == null) toast("Trang này không dịch được") else { t.web?.loadUrl(tu); toast("Đang dịch sang " + transNames[i] + "...") }
+                  }.show()
+              }
+
+              private fun showOriginal() {
+                  val t = tabs[cur]
+                  val o = originalUrl(t.url) ?: return
+                  t.web?.loadUrl(o)
               }
 
               private fun toggleDesktop() {
@@ -1853,6 +2043,8 @@ jobs:
                       row("Mở bằng app khác") { openOther(t.url) }
                       row("Video trên trang (${t.media.size})") { openMedia() }
                       row("Tìm trong trang") { openFind() }
+                      if (isTranslated(t.url)) row("Xem bản gốc") { showOriginal() } else row("Dịch trang") { translateDialog() }
+                      row("Cỡ chữ (${Store.textZoom(this)}%)") { openTextSize() }
                       row(if (t.desktop) "Xem bản di động" else "Xem bản máy tính") { toggleDesktop() }
                       row("Làm mới trang") { t.web?.reload() }
                   }
@@ -1863,12 +2055,14 @@ jobs:
                   pushOverlay(f)
               }
 
-              private fun copy(s: String) {
+              private fun copy(s0: String) {
+                  val s = if (cleanLinks) cleanUrl(s0) else s0
                   (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("link", s))
                   toast("Đã sao chép liên kết")
               }
 
-              private fun shareText(s: String) {
+              private fun shareText(s0: String) {
+                  val s = if (cleanLinks) cleanUrl(s0) else s0
                   val i = Intent(Intent.ACTION_SEND)
                   i.type = "text/plain"
                   i.putExtra(Intent.EXTRA_TEXT, s)
@@ -1890,7 +2084,7 @@ jobs:
                   val h = hostOf(t.url)
                   val off = exc.contains(h)
                   dlg().setTitle(h.ifEmpty { "Trang này" })
-                      .setMessage(if (!adOn) "Chặn quảng cáo đang tắt trong Cài đặt." else if (off) "Đã tắt chặn cho trang này." else "Đã chặn ${t.blocked} mục quảng cáo và ${t.popups} cửa sổ bật lên trên trang này.")
+                      .setMessage(if (!adOn && !trackOn) "Chặn quảng cáo và chống theo dõi đang tắt trong Cài đặt." else if (off) "Đã tắt chặn cho trang này." else "Trên trang này đã chặn ${t.blocked - t.trackers} quảng cáo, ${t.trackers} bộ theo dõi và ${t.popups} cửa sổ bật lên.")
                       .setPositiveButton(if (off) "Bật chặn lại" else "Tắt chặn cho trang này") { _, _ ->
                           val s = Store.exceptions(this)
                           if (off) s.remove(h) else if (h.isNotEmpty()) s.add(h)
@@ -2270,8 +2464,8 @@ jobs:
                       fInfo.text = if (n > 0) "Bộ lọc mở rộng: $n tên miền, cập nhật " + SimpleDateFormat("dd/MM HH:mm", Locale.US).format(Date(ts)) else "Chưa tải bộ lọc mở rộng. Bấm cập nhật để chặn mạnh hơn nhiều."
                   }
                   fText()
-                  val fp = lp(MATCH, WRAP); fp.topMargin = dp(12)
-                  body.addView(fInfo, fp)
+                  val fip = lp(MATCH, WRAP); fip.topMargin = dp(12)
+                  body.addView(fInfo, fip)
                   val fbtn = btn(this, "Cập nhật bộ lọc ngay", P.surface, P.text, P.line) {}
                   fbtn.setOnClickListener {
                       fbtn.text = "Đang tải..."
@@ -2303,6 +2497,17 @@ jobs:
                   renderExc()
                   body.addView(excBox)
 
+                  sec("Chống theo dõi và rò rỉ dữ liệu")
+                  swRow("Chặn bộ theo dõi", "Chặn Google Analytics, pixel theo dõi, đo lường hành vi", trackOn) { Store.setFlag(this, "trackOn", it); trackOn = it }
+                  swRow("Chặn cookie bên thứ ba", "Ngăn quảng cáo theo bạn qua nhiều trang. Có thể làm hỏng một số khung đăng nhập nhúng", tpcBlock) { Store.setFlag(this, "tpc", it); tpcBlock = it }
+                  swRow("Xóa mã theo dõi khỏi liên kết", "Bỏ utm_, fbclid, gclid... khi mở, sao chép và chia sẻ link", cleanLinks) { Store.setFlag(this, "cleanLinks", it); cleanLinks = it }
+                  swRow("Chặn rò rỉ IP qua WebRTC", "Ngăn trang lấy địa chỉ IP thật. Tắt nếu cần gọi video trên web", webrtcBlock) { Store.setFlag(this, "webrtc", it); webrtcBlock = it }
+                  swRow("Tín hiệu Đừng theo dõi", "Gửi DNT/GPC và hạn chế thông tin trang nguồn (Referer) gửi đi", dnt) { Store.setFlag(this, "dnt", it); dnt = it }
+                  swRow("Ưu tiên HTTPS", "Tự chuyển http sang https, nếu trang không hỗ trợ sẽ quay lại http", httpsOnly) { Store.setFlag(this, "https", it); httpsOnly = it }
+                  swRow("Chống vân tay trình duyệt (thử nghiệm)", "Làm nhiễu canvas và thông số máy. Có thể làm lỗi vài trang", fp) { Store.setFlag(this, "fp", it); fp = it }
+                  swRow("Tự xóa cookie khi đóng app", "Đóng hẳn app sẽ xóa cookie và dữ liệu trang", Store.flag(this, "wipe", false)) { Store.setFlag(this, "wipe", it) }
+                  body.addView(tv(this, "Ghi chú: các lớp bảo vệ bằng JavaScript chỉ chạy sau khi trang bắt đầu tải nên không tuyệt đối. Trang bị lỗi thì tắt chặn riêng trang đó bằng nút Chặn trên thanh địa chỉ. Quyền vị trí, camera, micro của trang luôn bị từ chối.", 12f, P.muted))
+
                   sec("Cửa sổ bật lên")
                   swRow("Chặn popup và tự mở tab mới", "Chặn trang tự mở tab, cửa sổ quảng cáo hoặc tự mở app khác khi bạn chưa bấm", popupBlock) { Store.setPopupBlock(this, it); popupBlock = it }
                   val popBox = LinearLayout(this)
@@ -2327,6 +2532,9 @@ jobs:
                   body.addView(popBox)
 
                   sec("Giao diện")
+                  val zb = btn(this, "Chỉnh cỡ chữ trang web (${Store.textZoom(this)}%)", P.surface, P.text, P.line) { openTextSize() }
+                  val zp = lp(MATCH, WRAP); zp.topMargin = dp(4); zp.bottomMargin = dp(8)
+                  body.addView(zb, zp)
                   segRow(listOf("Sáng", "Tối", "Hệ thống"), Store.theme(this)) { Store.setTheme(this, it); saveTabs(); recreate() }
                   swRow("Hiệu ứng 3D", "Bong bóng xoay và tab xếp lớp. Tắt nếu máy chậm.", fx3d) { Store.setFx3d(this, it); fx3d = it }
 
@@ -2335,11 +2543,12 @@ jobs:
 
                   sec("Riêng tư")
                   swRow("Lưu lịch sử xem", "Tắt thì trang mới không được ghi lại", Store.saveHist(this)) { Store.setSaveHist(this, it) }
-                  val clr = btn(this, "Xóa cookie và bộ nhớ đệm", P.surface, P.text, P.line) {
+                  val clr = btn(this, "Xóa cookie, bộ nhớ đệm và lịch sử", P.surface, P.text, P.line) {
                       CookieManager.getInstance().removeAllCookies(null)
                       WebStorage.getInstance().deleteAllData()
-                      for (t in tabs) t.web?.clearCache(true)
-                      toast("Đã xóa")
+                      for (t in tabs) { t.web?.clearCache(true); t.web?.clearFormData() }
+                      Store.clearHistory(this)
+                      toast("Đã xóa cookie, bộ nhớ đệm và lịch sử")
                   }
                   val cp = lp(MATCH, WRAP); cp.topMargin = dp(8)
                   body.addView(clr, cp)
@@ -2692,6 +2901,14 @@ jobs:
               fun filterTs(c: Context) = sp(c).getLong("filterTs", 0L)
               fun filterCount(c: Context) = sp(c).getInt("filterCount", 0)
               fun setFilterInfo(c: Context, ts: Long, n: Int) = sp(c).edit().putLong("filterTs", ts).putInt("filterCount", n).apply()
+
+              fun textZoom(c: Context) = sp(c).getInt("textZoom", 100)
+              fun setTextZoom(c: Context, v: Int) = sp(c).edit().putInt("textZoom", v).apply()
+              fun transLang(c: Context) = sp(c).getInt("transLang", 0)
+              fun setTransLang(c: Context, v: Int) = sp(c).edit().putInt("transLang", v).apply()
+
+              fun flag(c: Context, k: String, d: Boolean) = sp(c).getBoolean(k, d)
+              fun setFlag(c: Context, k: String, v: Boolean) = sp(c).edit().putBoolean(k, v).apply()
 
               fun exceptions(c: Context): MutableSet<String> = HashSet(sp(c).getStringSet("exc", emptySet()) ?: emptySet())
               fun setExceptions(c: Context, s: Set<String>) = sp(c).edit().putStringSet("exc", HashSet(s)).apply()
