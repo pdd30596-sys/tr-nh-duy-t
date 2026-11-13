@@ -2028,7 +2028,7 @@ jobs:
               }
 
               // ---- menu (lưới ô tính năng, vuốt ngang, sắp xếp được) ----
-              private class MenuItem(val id: String, val icon: String, val label: String, val show: Boolean, val act: () -> Unit)
+              private class MenuItem(val id: String, val icon: Int, val label: String, val show: Boolean, val act: () -> Unit)
 
               private fun menuCatalog(): List<MenuItem> {
                   val t = tabs[cur]
@@ -2036,20 +2036,20 @@ jobs:
                   val bm = on && Store.isBookmark(this, t.url)
                   val tr = on && isTranslated(t.url)
                   return listOf(
-                      MenuItem("bm", if (bm) "★" else "☆", if (bm) "Bỏ yêu thích" else "Thêm yêu thích", on) { toggleBookmark() },
-                      MenuItem("share", "📤", "Chia sẻ liên kết", on) { shareText(t.url) },
-                      MenuItem("copy", "🔗", "Sao chép liên kết", on) { copy(t.url) },
-                      MenuItem("other", "↗️", "Mở bằng app khác", on) { openOther(t.url) },
-                      MenuItem("media", "🎬", "Video trên trang (${t.media.size})", on) { openMedia() },
-                      MenuItem("find", "🔍", "Tìm trong trang", on) { openFind() },
-                      MenuItem("trans", "🌐", if (tr) "Xem bản gốc" else "Dịch trang", on) { if (tr) showOriginal() else translateDialog() },
-                      MenuItem("zoom", "🔠", "Cỡ chữ (${Store.textZoom(this)}%)", on) { openTextSize() },
-                      MenuItem("desk", if (t.desktop) "📱" else "🖥️", if (t.desktop) "Bản di động" else "Bản máy tính", on) { toggleDesktop() },
-                      MenuItem("reload", "🔄", "Làm mới trang", on) { t.web?.reload() },
-                      MenuItem("favs", "⭐", "Yêu thích", true) { openFavorites() },
-                      MenuItem("dl", "⬇️", "Tải xuống", true) { openDownloads() },
-                      MenuItem("hist", "🕘", "Lịch sử", true) { openHistory() },
-                      MenuItem("set", "⚙️", "Cài đặt", true) { openSettings() }
+                      MenuItem("bm", if (bm) R.drawable.ic_m_bm_on else R.drawable.ic_m_bm, if (bm) "Bỏ yêu thích" else "Thêm yêu thích", on) { toggleBookmark() },
+                      MenuItem("share", R.drawable.ic_m_share, "Chia sẻ liên kết", on) { shareText(t.url) },
+                      MenuItem("copy", R.drawable.ic_m_copy, "Sao chép liên kết", on) { copy(t.url) },
+                      MenuItem("other", R.drawable.ic_m_other, "Mở bằng app khác", on) { openOther(t.url) },
+                      MenuItem("media", R.drawable.ic_m_media, "Video trên trang (${t.media.size})", on) { openMedia() },
+                      MenuItem("find", R.drawable.ic_m_find, "Tìm trong trang", on) { openFind() },
+                      MenuItem("trans", R.drawable.ic_m_trans, if (tr) "Xem bản gốc" else "Dịch trang", on) { if (tr) showOriginal() else translateDialog() },
+                      MenuItem("zoom", R.drawable.ic_m_zoom, "Cỡ chữ (${Store.textZoom(this)}%)", on) { openTextSize() },
+                      MenuItem("desk", if (t.desktop) R.drawable.ic_m_phone else R.drawable.ic_m_desk, if (t.desktop) "Bản di động" else "Bản máy tính", on) { toggleDesktop() },
+                      MenuItem("reload", R.drawable.ic_m_reload, "Làm mới trang", on) { t.web?.reload() },
+                      MenuItem("favs", R.drawable.ic_m_favs, "Yêu thích", true) { openFavorites() },
+                      MenuItem("dl", R.drawable.ic_m_dl, "Tải xuống", true) { openDownloads() },
+                      MenuItem("hist", R.drawable.ic_m_hist, "Lịch sử", true) { openHistory() },
+                      MenuItem("set", R.drawable.ic_m_set, "Cài đặt", true) { openSettings() }
                   )
               }
 
@@ -2065,8 +2065,8 @@ jobs:
                   var sel: String? = null
                   var page = 0
                   val pw = resources.displayMetrics.widthPixels - dp(32)
-                  val cw = pw / 3
-                  val th = dp(104)
+                  val cw = pw / 4
+                  val th = dp(92)
                   val body = LinearLayout(this)
                   body.orientation = LinearLayout.VERTICAL
                   panel.addView(body, lp(MATCH, WRAP))
@@ -2098,10 +2098,10 @@ jobs:
                           body.addView(hint, hp)
                       }
 
-                      val perPage = 9
+                      val perPage = 12
                       val pages = maxOf(1, (items.size + perPage - 1) / perPage)
                       page = page.coerceIn(0, pages - 1)
-                      val rows = if (pages > 1) 3 else maxOf(1, (items.size + 2) / 3)
+                      val rows = if (pages > 1) 3 else maxOf(1, (items.size + 3) / 4)
 
                       val hs = android.widget.HorizontalScrollView(this)
                       hs.isHorizontalScrollBarEnabled = false
@@ -2114,29 +2114,30 @@ jobs:
                           for (r in 0 until rows) {
                               val row = LinearLayout(this)
                               row.orientation = LinearLayout.HORIZONTAL
-                              for (c in 0 until 3) {
-                                  val idx = p * perPage + r * 3 + c
+                              for (c in 0 until 4) {
+                                  val idx = p * perPage + r * 4 + c
                                   val cell = FrameLayout(this)
                                   if (idx < items.size) {
                                       val m = items[idx]
                                       val isSel = editing && sel == m.id
                                       val card = LinearLayout(this)
                                       card.orientation = LinearLayout.VERTICAL
-                                      card.gravity = Gravity.CENTER
-                                      card.setPadding(dp(4), dp(8), dp(4), dp(8))
-                                      card.background = rr(this, if (isSel) P.accent else P.bg, 16, if (isSel) P.accent else P.line)
-                                      val ic = tv(this, m.icon, 28f, P.text)
-                                      ic.gravity = Gravity.CENTER
-                                      card.addView(ic, lp(WRAP, WRAP))
-                                      val lb = tv(this, m.label, 12f, if (isSel) P.onAccent else P.text, true)
+                                      card.gravity = Gravity.CENTER_HORIZONTAL
+                                      card.setPadding(dp(2), dp(8), dp(2), dp(4))
+                                      val circ = FrameLayout(this)
+                                      circ.background = rr(this, if (isSel) P.accent else P.bg, 24, if (isSel) P.accent else P.line)
+                                      val img = ImageView(this)
+                                      img.setImageResource(m.icon)
+                                      img.setColorFilter(if (isSel) P.onAccent else if (m.id == "media") P.video else P.accent)
+                                      circ.addView(img, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+                                      card.addView(circ, lp(dp(48), dp(48)))
+                                      val lb = tv(this, m.label, 11f, if (isSel) P.accent else P.text)
                                       lb.gravity = Gravity.CENTER
                                       lb.maxLines = 2
                                       lb.ellipsize = android.text.TextUtils.TruncateAt.END
                                       val lq = lp(MATCH, WRAP); lq.topMargin = dp(6)
                                       card.addView(lb, lq)
-                                      val cq = FrameLayout.LayoutParams(MATCH, MATCH)
-                                      cq.setMargins(dp(4), dp(4), dp(4), dp(4))
-                                      cell.addView(card, cq)
+                                      cell.addView(card, FrameLayout.LayoutParams(MATCH, MATCH))
                                       cell.contentDescription = m.label
                                       cell.setOnClickListener {
                                           if (!editing) { popOverlay(); m.act() }
@@ -2174,13 +2175,13 @@ jobs:
                           for (i in 0 until pages) {
                               val d = View(this)
                               dots.add(d)
-                              val q = lp(dp(7), dp(7)); q.leftMargin = dp(4); q.rightMargin = dp(4)
+                              val q = lp(dp(6), dp(6)); q.leftMargin = dp(3); q.rightMargin = dp(3)
                               dr.addView(d, q)
                           }
                           val dq = lp(MATCH, WRAP); dq.topMargin = dp(8)
                           body.addView(dr, dq)
                       }
-                      fun paintDots() { for (i in dots.indices) dots[i].background = rr(this, if (i == page) P.accent else P.line, 4) }
+                      fun paintDots() { for (i in dots.indices) { dots[i].background = rr(this, if (i == page) P.accent else P.line, 3); val q = dots[i].layoutParams as LinearLayout.LayoutParams; q.width = if (i == page) dp(16) else dp(6); dots[i].layoutParams = q } }
                       fun snapTo(n: Int) {
                           page = n.coerceIn(0, pages - 1)
                           hs.smoothScrollTo(page * pw, 0)
@@ -3617,6 +3618,247 @@ jobs:
               <path
                   android:fillColor="#FFFFFF"
                   android:pathData="M45,36 L45,72 L74,54 Z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_bm.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M6 3h12v18l-6-4-6 4z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_bm_on.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FFFFFF"
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M6 3h12v18l-6-4-6 4z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_copy.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M10 14a4 4 0 0 0 5.7 0 l3-3a4 4 0 0 0 -5.7 -5.7 l-1 1M14 10a4 4 0 0 0 -5.7 0 l-3 3a4 4 0 0 0 5.7 5.7 l1-1" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_desk.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M3 5h18v11H3zM8 20h8M12 16v4" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_dl.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 4v11M7 11l5 5 5-5M5 20h14" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_favs.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_find.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0 -14 zM21 21l-5-5" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_hist.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M3 12a9 9 0 1 0 9 -9 9 9 0 0 0 -6.4 2.6 L3 8M3 3v5h5M12 7v5l3 2" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_media.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M4 6h11a1 1 0 0 1 1 1 v10a1 1 0 0 1 -1 1 H4a1 1 0 0 1 -1 -1 V7a1 1 0 0 1 1 -1 zM16 10l5-3v10l-5-3" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_other.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1 -1 1 H5a1 1 0 0 1 -1 -1 V7a1 1 0 0 1 1 -1 h5" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_phone.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M8 3h8a1 1 0 0 1 1 1 v16a1 1 0 0 1 -1 1 H8a1 1 0 0 1 -1 -1 V4a1 1 0 0 1 1 -1 zM11 18h2" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_reload.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M20 11a8 8 0 1 0 -2.3 5.7 M20 4v7h-7" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_set.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M6 15v4" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_share.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 3v12M8 7l4-4 4 4M5 13v6a2 2 0 0 0 2 2 h10a2 2 0 0 0 2 -2 v-6" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_trans.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0 -18 zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_zoom.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M4 19l5-14 5 14M6 14h6M16 19l3-8 3 8M17 17h4" />
           </vector>
           AMLICH_EOF
           mkdir -p "app/src/main/res/values"
