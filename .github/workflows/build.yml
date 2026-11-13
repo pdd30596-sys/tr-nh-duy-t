@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 8
-                  versionName "1.7"
+                  versionCode 9
+                  versionName "1.8"
               }
 
               signingConfigs {
@@ -2027,34 +2027,181 @@ jobs:
                   return Triple(f, panel, handle)
               }
 
-              // ---- menu ----
+              // ---- menu (lưới ô tính năng, vuốt ngang, sắp xếp được) ----
+              private class MenuItem(val id: String, val icon: String, val label: String, val show: Boolean, val act: () -> Unit)
+
+              private fun menuCatalog(): List<MenuItem> {
+                  val t = tabs[cur]
+                  val on = t.web != null && t.url.isNotEmpty()
+                  val bm = on && Store.isBookmark(this, t.url)
+                  val tr = on && isTranslated(t.url)
+                  return listOf(
+                      MenuItem("bm", if (bm) "★" else "☆", if (bm) "Bỏ yêu thích" else "Thêm yêu thích", on) { toggleBookmark() },
+                      MenuItem("share", "📤", "Chia sẻ liên kết", on) { shareText(t.url) },
+                      MenuItem("copy", "🔗", "Sao chép liên kết", on) { copy(t.url) },
+                      MenuItem("other", "↗️", "Mở bằng app khác", on) { openOther(t.url) },
+                      MenuItem("media", "🎬", "Video trên trang (${t.media.size})", on) { openMedia() },
+                      MenuItem("find", "🔍", "Tìm trong trang", on) { openFind() },
+                      MenuItem("trans", "🌐", if (tr) "Xem bản gốc" else "Dịch trang", on) { if (tr) showOriginal() else translateDialog() },
+                      MenuItem("zoom", "🔠", "Cỡ chữ (${Store.textZoom(this)}%)", on) { openTextSize() },
+                      MenuItem("desk", if (t.desktop) "📱" else "🖥️", if (t.desktop) "Bản di động" else "Bản máy tính", on) { toggleDesktop() },
+                      MenuItem("reload", "🔄", "Làm mới trang", on) { t.web?.reload() },
+                      MenuItem("favs", "⭐", "Yêu thích", true) { openFavorites() },
+                      MenuItem("dl", "⬇️", "Tải xuống", true) { openDownloads() },
+                      MenuItem("hist", "🕘", "Lịch sử", true) { openHistory() },
+                      MenuItem("set", "⚙️", "Cài đặt", true) { openSettings() }
+                  )
+              }
+
               private fun openMenu() {
                   val (f, panel, _) = sheet()
-                  val t = tabs[cur]
-                  val onWeb = t.web != null && t.url.isNotEmpty()
-                  fun row(label: String, a: () -> Unit) {
-                      val r = tv(this, label, 15f, P.text)
-                      r.gravity = Gravity.CENTER_VERTICAL
-                      r.minHeight = dp(52)
-                      r.setOnClickListener { popOverlay(); a() }
-                      panel.addView(r, lp(MATCH, WRAP))
+                  val cat = menuCatalog()
+                  val defaults = cat.map { it.id }
+                  val order = ArrayList<String>()
+                  for (id in Store.menuOrder(this)) if (defaults.contains(id) && !order.contains(id)) order.add(id)
+                  for (id in defaults) if (!order.contains(id)) order.add(id)   // tính năng mới tự thêm vào cuối
+
+                  var editing = false
+                  var sel: String? = null
+                  var page = 0
+                  val pw = resources.displayMetrics.widthPixels - dp(32)
+                  val cw = pw / 3
+                  val th = dp(104)
+                  val body = LinearLayout(this)
+                  body.orientation = LinearLayout.VERTICAL
+                  panel.addView(body, lp(MATCH, WRAP))
+
+                  fun render() {
+                      body.removeAllViews()
+                      val items = order.mapNotNull { id -> cat.firstOrNull { it.id == id && it.show } }
+
+                      val head = LinearLayout(this)
+                      head.gravity = Gravity.CENTER_VERTICAL
+                      head.addView(tv(this, if (editing) "Sắp xếp tính năng" else "Tính năng", 18f, P.text, true), lp(0, WRAP, 1f))
+                      if (editing) {
+                          val reset = tv(this, "Mặc định", 14f, P.muted, true)
+                          reset.setPadding(dp(10), dp(12), dp(10), dp(12))
+                          reset.setOnClickListener {
+                              order.clear(); order.addAll(defaults); sel = null
+                              Store.setMenuOrder(this, order); render()
+                          }
+                          head.addView(reset)
+                      }
+                      val tog = tv(this, if (editing) "Xong" else "Sắp xếp", 14f, P.accent, true)
+                      tog.setPadding(dp(10), dp(12), dp(4), dp(12))
+                      tog.setOnClickListener { editing = !editing; sel = null; render() }
+                      head.addView(tog)
+                      body.addView(head, lp(MATCH, WRAP))
+                      if (editing) {
+                          val hint = tv(this, "Chạm một ô, rồi chạm ô khác để đổi chỗ. Vuốt ngang để sang trang khác.", 12f, P.muted)
+                          val hp = lp(MATCH, WRAP); hp.bottomMargin = dp(4)
+                          body.addView(hint, hp)
+                      }
+
+                      val perPage = 9
+                      val pages = maxOf(1, (items.size + perPage - 1) / perPage)
+                      page = page.coerceIn(0, pages - 1)
+                      val rows = if (pages > 1) 3 else maxOf(1, (items.size + 2) / 3)
+
+                      val hs = android.widget.HorizontalScrollView(this)
+                      hs.isHorizontalScrollBarEnabled = false
+                      hs.overScrollMode = View.OVER_SCROLL_NEVER
+                      val strip = LinearLayout(this)
+                      strip.orientation = LinearLayout.HORIZONTAL
+                      for (p in 0 until pages) {
+                          val pg = LinearLayout(this)
+                          pg.orientation = LinearLayout.VERTICAL
+                          for (r in 0 until rows) {
+                              val row = LinearLayout(this)
+                              row.orientation = LinearLayout.HORIZONTAL
+                              for (c in 0 until 3) {
+                                  val idx = p * perPage + r * 3 + c
+                                  val cell = FrameLayout(this)
+                                  if (idx < items.size) {
+                                      val m = items[idx]
+                                      val isSel = editing && sel == m.id
+                                      val card = LinearLayout(this)
+                                      card.orientation = LinearLayout.VERTICAL
+                                      card.gravity = Gravity.CENTER
+                                      card.setPadding(dp(4), dp(8), dp(4), dp(8))
+                                      card.background = rr(this, if (isSel) P.accent else P.bg, 16, if (isSel) P.accent else P.line)
+                                      val ic = tv(this, m.icon, 28f, P.text)
+                                      ic.gravity = Gravity.CENTER
+                                      card.addView(ic, lp(WRAP, WRAP))
+                                      val lb = tv(this, m.label, 12f, if (isSel) P.onAccent else P.text, true)
+                                      lb.gravity = Gravity.CENTER
+                                      lb.maxLines = 2
+                                      lb.ellipsize = android.text.TextUtils.TruncateAt.END
+                                      val lq = lp(MATCH, WRAP); lq.topMargin = dp(6)
+                                      card.addView(lb, lq)
+                                      val cq = FrameLayout.LayoutParams(MATCH, MATCH)
+                                      cq.setMargins(dp(4), dp(4), dp(4), dp(4))
+                                      cell.addView(card, cq)
+                                      cell.contentDescription = m.label
+                                      cell.setOnClickListener {
+                                          if (!editing) { popOverlay(); m.act() }
+                                          else {
+                                              val s = sel
+                                              if (s == null) { sel = m.id; render() }
+                                              else if (s == m.id) { sel = null; render() }
+                                              else {
+                                                  val a = order.indexOf(s); val b = order.indexOf(m.id)
+                                                  val tmp = order[a]; order[a] = order[b]; order[b] = tmp
+                                                  sel = null
+                                                  Store.setMenuOrder(this, order)
+                                                  render()
+                                              }
+                                          }
+                                      }
+                                      cell.setOnLongClickListener {
+                                          if (!editing) { editing = true; sel = m.id; render() }
+                                          true
+                                      }
+                                  }
+                                  row.addView(cell, lp(cw, th))
+                              }
+                              pg.addView(row, lp(pw, WRAP))
+                          }
+                          strip.addView(pg, lp(pw, WRAP))
+                      }
+                      hs.addView(strip)
+                      body.addView(hs, lp(MATCH, WRAP))
+
+                      val dots = ArrayList<View>()
+                      if (pages > 1) {
+                          val dr = LinearLayout(this)
+                          dr.gravity = Gravity.CENTER
+                          for (i in 0 until pages) {
+                              val d = View(this)
+                              dots.add(d)
+                              val q = lp(dp(7), dp(7)); q.leftMargin = dp(4); q.rightMargin = dp(4)
+                              dr.addView(d, q)
+                          }
+                          val dq = lp(MATCH, WRAP); dq.topMargin = dp(8)
+                          body.addView(dr, dq)
+                      }
+                      fun paintDots() { for (i in dots.indices) dots[i].background = rr(this, if (i == page) P.accent else P.line, 4) }
+                      fun snapTo(n: Int) {
+                          page = n.coerceIn(0, pages - 1)
+                          hs.smoothScrollTo(page * pw, 0)
+                          paintDots()
+                      }
+                      paintDots()
+                      var startX = 0
+                      hs.setOnTouchListener { _, e ->
+                          when (e.action) {
+                              MotionEvent.ACTION_DOWN -> startX = hs.scrollX
+                              MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                  val d = hs.scrollX - page * pw
+                                  val target = if (d > pw * 0.15f) page + 1 else if (d < -pw * 0.15f) page - 1 else page
+                                  hs.post { snapTo(target) }
+                              }
+                          }
+                          false
+                      }
+                      hs.post { hs.scrollTo(page * pw, 0) }
                   }
-                  if (onWeb) {
-                      row(if (Store.isBookmark(this, t.url)) "Bỏ khỏi yêu thích" else "Thêm vào yêu thích") { toggleBookmark() }
-                      row("Chia sẻ liên kết") { shareText(t.url) }
-                      row("Sao chép liên kết") { copy(t.url) }
-                      row("Mở bằng app khác") { openOther(t.url) }
-                      row("Video trên trang (${t.media.size})") { openMedia() }
-                      row("Tìm trong trang") { openFind() }
-                      if (isTranslated(t.url)) row("Xem bản gốc") { showOriginal() } else row("Dịch trang") { translateDialog() }
-                      row("Cỡ chữ (${Store.textZoom(this)}%)") { openTextSize() }
-                      row(if (t.desktop) "Xem bản di động" else "Xem bản máy tính") { toggleDesktop() }
-                      row("Làm mới trang") { t.web?.reload() }
-                  }
-                  row("Yêu thích") { openFavorites() }
-                  row("Tải xuống") { openDownloads() }
-                  row("Lịch sử") { openHistory() }
-                  row("Cài đặt") { openSettings() }
+                  render()
                   pushOverlay(f)
               }
 
@@ -3032,6 +3179,10 @@ jobs:
 
               fun flag(c: Context, k: String, d: Boolean) = sp(c).getBoolean(k, d)
               fun setFlag(c: Context, k: String, v: Boolean) = sp(c).edit().putBoolean(k, v).apply()
+
+              // thứ tự ô trong menu tính năng
+              fun menuOrder(c: Context): List<String> = (sp(c).getString("menuOrder", "") ?: "").split(",").filter { it.isNotEmpty() }
+              fun setMenuOrder(c: Context, l: List<String>) = sp(c).edit().putString("menuOrder", l.joinToString(",")).apply()
 
               fun exceptions(c: Context): MutableSet<String> = HashSet(sp(c).getStringSet("exc", emptySet()) ?: emptySet())
               fun setExceptions(c: Context, s: Set<String>) = sp(c).edit().putStringSet("exc", HashSet(s)).apply()
