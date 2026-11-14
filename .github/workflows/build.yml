@@ -2918,7 +2918,7 @@ jobs:
                   try {
                       val ua = t.web?.settings?.userAgentString ?: ""
                       val i = Intent(Intent.ACTION_VIEW)
-                      i.setDataAndType(Uri.parse(m.url), if (m.type == "HLS") "application/x-mpegURL" else "video/*")
+                      i.setDataAndType(Uri.parse(m.url), "video/*")
                       i.putExtra("title", t.title)
                       val hd = ArrayList<String>()
                       if (ua.isNotEmpty()) { hd.add("User-Agent"); hd.add(ua) }
@@ -2935,7 +2935,6 @@ jobs:
                           if (pk == packageName || browsers.contains(pk)) ex.add(ComponentName(pk, ri.activityInfo.name))
                           else if (!players.contains(pk)) players.add(pk)
                       }
-                      if (players.isEmpty()) { toast("Chưa có app xem video (MX Player, VLC...). Hãy cài một app rồi thử lại"); return }
                       if (players.size == 1) {
                           i.setPackage(players[0])
                           startActivity(i)
