@@ -67,6 +67,26 @@ jobs:
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+          
+              <queries>
+                  <intent>
+                      <action android:name="android.intent.action.VIEW" />
+                      <category android:name="android.intent.category.BROWSABLE" />
+                      <data android:scheme="https" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.VIEW" />
+                      <data android:scheme="https" android:mimeType="video/*" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.VIEW" />
+                      <data android:scheme="http" android:mimeType="video/*" />
+                  </intent>
+                  <intent>
+                      <action android:name="android.intent.action.VIEW" />
+                      <data android:scheme="https" android:mimeType="application/x-mpegURL" />
+                  </intent>
+              </queries>
 
               <application
                   android:allowBackup="true"
@@ -2904,9 +2924,26 @@ jobs:
                       if (ua.isNotEmpty()) { hd.add("User-Agent"); hd.add(ua) }
                       if (!m.referer.isNullOrEmpty()) { hd.add("Referer"); hd.add(m.referer) }
                       if (hd.isNotEmpty()) i.putExtra("headers", hd.toTypedArray())
-                      val ch = Intent.createChooser(i, "Mở video bằng")
-                      ch.putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(this, MainActivity::class.java), ComponentName(this, PlayerActivity::class.java)))
-                      startActivity(ch)
+                      val pm = packageManager
+                      val probe = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE)
+                      val browsers = HashSet<String>()
+                      for (ri in pm.queryIntentActivities(probe, 0)) browsers.add(ri.activityInfo.packageName)
+                      val ex = ArrayList<ComponentName>()
+                      val players = ArrayList<String>()
+                      for (ri in pm.queryIntentActivities(i, 0)) {
+                          val pk = ri.activityInfo.packageName
+                          if (pk == packageName || browsers.contains(pk)) ex.add(ComponentName(pk, ri.activityInfo.name))
+                          else if (!players.contains(pk)) players.add(pk)
+                      }
+                      if (players.isEmpty()) { toast("Chưa có app xem video (MX Player, VLC...). Hãy cài một app rồi thử lại"); return }
+                      if (players.size == 1) {
+                          i.setPackage(players[0])
+                          startActivity(i)
+                      } else {
+                          val ch = Intent.createChooser(i, "Mở video bằng")
+                          ch.putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, ex.toTypedArray())
+                          startActivity(ch)
+                      }
                   } catch (e: Exception) { toast("Không có app xem video phù hợp") }
               }
 
