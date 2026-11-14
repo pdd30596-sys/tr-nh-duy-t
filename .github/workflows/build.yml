@@ -935,12 +935,24 @@ jobs:
                   super.onStop()
               }
 
+              private val scanTick = object : Runnable {
+                  override fun run() {
+                      val t = tabs.getOrNull(cur)
+                      if (t != null && t.web != null && t.url.startsWith("http") && overlays.isEmpty()) scanVideos(t)
+                      main.postDelayed(this, 2000)
+                  }
+              }
+
               override fun onResume() {
                   super.onResume()
                   tabs.getOrNull(cur)?.web?.onResume()
+                  main.removeCallbacks(scanTick)
+                  main.postDelayed(scanTick, 1500)
+                  updateBubble()
               }
 
               override fun onPause() {
+                  main.removeCallbacks(scanTick)
                   tabs.getOrNull(cur)?.web?.onPause()
                   super.onPause()
               }
@@ -1569,10 +1581,6 @@ jobs:
                           val t = tab
                           if ((adOn || trackOn) && !req.isForMainFrame && !exc.contains(hostOf(t.url))) {
                               val k = AdBlock.classify(url, if (adOn) adLevel else -1, trackOn)
-                              if (k != 0 && videoType(url) != null && !AdBlock.isAdHost(url, 0)) {
-                                  sniff(t, url)
-                                  return null
-                              }
                               if (k != 0) {
                                   blockedTotal++
                                   main.post { t.blocked++; if (k == 2) t.trackers++; if (tabs.getOrNull(cur) === t) updateShield() }
@@ -1655,10 +1663,6 @@ jobs:
                       }
 
                       override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-                          if (tab.url.substringBefore('#') != url.substringBefore('#') && tab.media.isNotEmpty()) {
-                              tab.media.clear()
-                              if (tabs.getOrNull(cur) === tab) updateBubble()
-                          }
                           tab.url = url
                           if (tabs.getOrNull(cur) === tab) { if (!urlEdit.hasFocus()) urlEdit.setText(url); updateNav() }
                       }
@@ -2039,33 +2043,17 @@ jobs:
               }
 
               // ================= bắt link video =================
-              private val vidRx = Regex("\\.(m3u8|mpd|mp4|m4v|mov|webm|mkv|flv)(?=[?&#/;=,]|$)")
-
-              /** Nhận diện URL video: đuôi file ở bất kỳ đâu trong URL (kể cả trong tham số), hoặc mime=video / videoplayback. */
-              private fun videoType(url: String): String? {
-                  if (!url.startsWith("http")) return null
-                  val l = try { Uri.decode(url).lowercase() } catch (e: Exception) { url.lowercase() }
-                  val noFrag = l.substringBefore('#')
-                  val m = vidRx.find(noFrag)
-                  if (m != null) {
-                      return when (m.groupValues[1]) {
-                          "m3u8" -> "HLS"
-                          "mpd" -> "DASH"
-                          "webm" -> "WEBM"
-                          "mkv" -> "MKV"
-                          "flv" -> "FLV"
-                          else -> "MP4"
-                      }
-                  }
-                  if (noFrag.contains("mime=video") || noFrag.contains("mime=application/x-mpegurl") || noFrag.contains("mime=application/vnd.apple.mpegurl")) {
-                      return if (noFrag.contains("webm")) "WEBM" else if (noFrag.contains("mpegurl")) "HLS" else "MP4"
-                  }
-                  if (noFrag.contains("/videoplayback") && !noFrag.contains("mime=audio")) return "MP4"
-                  return null
-              }
-
               private fun sniff(t: Tab, url: String) {
-                  val type = videoType(url) ?: return
+                  val path = url.substringBefore('#').substringBefore('?').lowercase()
+                  val type = when {
+                      path.endsWith(".m3u8") -> "HLS"
+                      path.endsWith(".mp4") || path.endsWith(".m4v") || path.endsWith(".mov") -> "MP4"
+                      path.endsWith(".webm") -> "WEBM"
+                      path.endsWith(".mkv") -> "MKV"
+                      path.endsWith(".flv") -> "FLV"
+                      path.endsWith(".mpd") -> "DASH"
+                      else -> return
+                  }
                   val ref = t.url
                   main.post { addMedia(t, url, type, ref) }
               }
@@ -2078,12 +2066,22 @@ jobs:
 
               private fun scanVideos(t: Tab) {
                   val w = t.web ?: return
-                  w.evaluateJavascript("(function(){var r=[];document.querySelectorAll('video,video source').forEach(function(v){var s=v.currentSrc||v.src;if(s&&s.indexOf('http')===0)r.push(s);});return r.join('\\n');})()") { v ->
+                  w.evaluateJavascript("(function(){var r=[];try{document.querySelectorAll('video,video source').forEach(function(v){var s=v.currentSrc||v.src;if(s&&s.indexOf('http')===0)r.push(s);});}catch(e){}" +
+                      "try{performance.getEntriesByType('resource').forEach(function(e){var n=e.name;if(n&&n.indexOf('http')===0&&/\\.(m3u8|mp4|m4v|webm|mpd|mkv|flv|mov)([?#]|\$)/i.test(n))r.push(n);});}catch(e){}" +
+                      "return r.join('\\n');})()") { v ->
                       try {
                           val s = JSONTokener(v ?: "null").nextValue()
                           if (s is String && s.isNotBlank()) {
                               for (u in s.split("\n")) {
-                                  val ty = videoType(u) ?: "MP4"
+                                  val p = u.substringBefore('#').substringBefore('?').lowercase()
+                                  val ty = when {
+                                      p.endsWith(".m3u8") -> "HLS"
+                                      p.endsWith(".webm") -> "WEBM"
+                                      p.endsWith(".mkv") -> "MKV"
+                                      p.endsWith(".flv") -> "FLV"
+                                      p.endsWith(".mpd") -> "DASH"
+                                      else -> "MP4"
+                                  }
                                   addMedia(t, u, ty, t.url)
                               }
                           }
@@ -4389,6 +4387,7 @@ jobs:
                       override fun getOutline(v: View, o: Outline) {
                           val ins = context.dp(6)
                           o.setRoundRect(ins, ins, v.width - ins, v.height - ins, (v.height - 2 * ins) / 2f)
+                          o.alpha = 0.9f
                       }
                   }
                   elevation = context.dp(10).toFloat()
