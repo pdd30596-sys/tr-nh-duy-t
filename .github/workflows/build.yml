@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 10
-                  versionName "1.9"
+                  versionCode 11
+                  versionName "2.0"
               }
 
               signingConfigs {
@@ -756,6 +756,7 @@ jobs:
           import android.widget.LinearLayout
           import android.widget.ProgressBar
           import android.widget.ScrollView
+          import android.widget.SeekBar
           import android.widget.TextView
           import android.widget.Toast
           import org.json.JSONTokener
@@ -1257,18 +1258,25 @@ jobs:
               }
 
               private fun buildHome(): View {
+                  val wp = Wall.drawable(this)
+                  val glass = wp != null
+                  val cSurf = if (glass) 0x8C132334.toInt() else cSurf
+                  val cLine = if (glass) 0x30FFFFFF else cLine
+                  val cText = if (glass) Color.WHITE else cText
+                  val cMuted = if (glass) 0xFFE3E8F0.toInt() else cMuted
+                  val cAcc = if (glass) Color.WHITE else P.accent
                   val sv = ScrollView(this)
-                  sv.setBackgroundColor(P.bg)
+                  sv.setBackgroundColor(if (glass) Color.TRANSPARENT else P.bg)
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
 
                   // ---- phần đầu (hero) ----
-                  val heroText = if (P.dark) 0xFFEAF3FB.toInt() else 0xFF0F2A3F.toInt()
-                  val heroSub = if (P.dark) 0xFFCFE8FB.toInt() else 0xFF2A4A66.toInt()
+                  val heroText = if (P.dark || glass) 0xFFEAF3FB.toInt() else 0xFF0F2A3F.toInt()
+                  val heroSub = if (P.dark || glass) 0xFFCFE8FB.toInt() else 0xFF2A4A66.toInt()
                   val hero = LinearLayout(this)
                   hero.orientation = LinearLayout.VERTICAL
                   hero.setPadding(dp(20), dp(24), dp(20), dp(26))
-                  hero.background = android.graphics.drawable.GradientDrawable(
+                  if (!glass) hero.background = android.graphics.drawable.GradientDrawable(
                       android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
                       intArrayOf(if (P.dark) 0xFF1B4F7A.toInt() else 0xFF9CCBEE.toInt(), if (P.dark) 0xFF0F2C44.toInt() else 0xFFCFE6F7.toInt(), P.bg))
                   val hr = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -1313,25 +1321,25 @@ jobs:
                   col.addView(body, lp(MATCH, WRAP))
                   fun sec(t: String) {
                       val q = lp(MATCH, WRAP); q.topMargin = dp(22); q.bottomMargin = dp(10)
-                      body.addView(tv(this, t, 15f, P.text, true), q)
+                      body.addView(tv(this, t, 15f, cText, true), q)
                   }
 
                   // ---- hàng phím tắt ----
                   val quick = LinearLayout(this)
                   quick.orientation = LinearLayout.HORIZONTAL
                   val qi = listOf(Triple(R.drawable.ic_m_dl, "Tải xuống", { openDownloads() }), Triple(R.drawable.ic_m_hist, "Lịch sử", { openHistory() }),
-                      Triple(R.drawable.ic_m_favs, "Yêu thích", { openFavorites() }), Triple(R.drawable.ic_m_set, "Cài đặt", { openSettings() }))
+                      Triple(R.drawable.ic_m_favs, "Yêu thích", { openFavorites() }), Triple(R.drawable.ic_m_ext, "Tiện ích", { openExtensions() }))
                   for (i in qi.indices) {
                       val q0 = qi[i]
                       val b = LinearLayout(this)
                       b.orientation = LinearLayout.VERTICAL
                       b.gravity = Gravity.CENTER
-                      b.background = rr(this, P.surface, 16, P.line)
+                      b.background = rr(this, cSurf, 16, cLine)
                       val img = ImageView(this)
                       img.setImageResource(q0.first)
-                      img.setColorFilter(P.accent)
+                      img.setColorFilter(cAcc)
                       b.addView(img, lp(dp(22), dp(22)))
-                      val lb = tv(this, q0.second, 11f, P.text)
+                      val lb = tv(this, q0.second, 11f, cText)
                       lb.gravity = Gravity.CENTER
                       lb.maxLines = 1
                       val lq = lp(WRAP, WRAP); lq.topMargin = dp(6)
@@ -1351,20 +1359,20 @@ jobs:
                   hs.overScrollMode = View.OVER_SCROLL_NEVER
                   val strip = LinearLayout(this)
                   strip.orientation = LinearLayout.HORIZONTAL
-                  val pink = if (P.dark) 0xFFF58BB4.toInt() else 0xFFC0477A.toInt()
-                  val purple = if (P.dark) 0xFFA99BFF.toInt() else 0xFF6A55E0.toInt()
-                  val tints = intArrayOf(P.accent, P.video, P.ok, P.star, pink, purple)
+                  val pink = if (P.dark || glass) 0xFFF58BB4.toInt() else 0xFFC0477A.toInt()
+                  val purple = if (P.dark || glass) 0xFFA99BFF.toInt() else 0xFF6A55E0.toInt()
+                  val tints = intArrayOf(if (glass) 0xFF5BB4F5.toInt() else P.accent, if (glass) 0xFFFFA36B.toInt() else P.video, if (glass) 0xFF5EE0B5.toInt() else P.ok, if (glass) 0xFFFFD166.toInt() else P.star, pink, purple)
                   val sc = Store.shortcuts(this)
                   val items = ArrayList<Pair<String, String>?>()
                   items.addAll(sc)
                   items.add(null)
                   for (i in items.indices) {
                       val entry = items[i]
-                      val tint = if (entry == null) P.muted else tints[i % tints.size]
+                      val tint = if (entry == null) cMuted else tints[i % tints.size]
                       val card = LinearLayout(this)
                       card.orientation = LinearLayout.VERTICAL
                       card.setPadding(dp(12), dp(12), dp(12), dp(12))
-                      card.background = rr(this, (tint and 0x00FFFFFF) or 0x26000000, 20)
+                      card.background = rr(this, if (glass) cSurf else (tint and 0x00FFFFFF) or 0x26000000, 20, if (glass) cLine else 0)
                       val ico = if (entry == null) R.drawable.ic_m_h_plus else homeIconFor(entry.second, entry.first)
                       if (ico != null) {
                           val img = ImageView(this)
@@ -1375,7 +1383,7 @@ jobs:
                           card.addView(tv(this, entry!!.first.take(1).uppercase(), 20f, tint, true), lp(WRAP, dp(24)))
                       }
                       card.addView(View(this), lp(1, 0, 1f))
-                      val lb = tv(this, entry?.first ?: "Thêm", 12f, P.text, true)
+                      val lb = tv(this, entry?.first ?: "Thêm", 12f, cText, true)
                       lb.maxLines = 1
                       lb.ellipsize = android.text.TextUtils.TruncateAt.END
                       card.addView(lb, lp(MATCH, WRAP))
@@ -1406,7 +1414,7 @@ jobs:
                           sec("Tiếp tục xem")
                           val card = LinearLayout(this)
                           card.gravity = Gravity.CENTER_VERTICAL
-                          card.background = rr(this, P.surface, 18, P.line)
+                          card.background = rr(this, cSurf, 18, cLine)
                           card.setPadding(dp(10), dp(10), dp(10), dp(10))
                           val th = FrameLayout(this)
                           th.background = rr(this, 0xFF2A4A66.toInt(), 12)
@@ -1417,17 +1425,17 @@ jobs:
                           val info = LinearLayout(this)
                           info.orientation = LinearLayout.VERTICAL
                           val nm = lv[1].ifBlank { Uri.decode(lv[0].substringBefore('?').substringAfterLast('/')) }
-                          val t1 = tv(this, nm, 13f, P.text, true)
+                          val t1 = tv(this, nm, 13f, cText, true)
                           t1.maxLines = 1
                           t1.ellipsize = android.text.TextUtils.TruncateAt.END
                           info.addView(t1)
                           val left = (dur - pos) / 1000
                           val ls = if (left >= 3600) String.format(Locale.US, "%d:%02d:%02d", left / 3600, (left % 3600) / 60, left % 60) else String.format(Locale.US, "%02d:%02d", left / 60, left % 60)
-                          val t2 = tv(this, "Còn lại $ls", 11f, P.muted)
+                          val t2 = tv(this, "Còn lại $ls", 11f, cMuted)
                           info.addView(t2, lp(WRAP, WRAP).also { it.topMargin = dp(2) })
                           val bar = LinearLayout(this)
                           val bd = View(this); bd.background = rr(this, P.accent, 2)
-                          val bl = View(this); bl.background = rr(this, P.line, 2)
+                          val bl = View(this); bl.background = rr(this, cLine, 2)
                           bar.addView(bd, lp(0, dp(4), pos.toFloat()))
                           bar.addView(bl, lp(0, dp(4), (dur - pos).toFloat()))
                           info.addView(bar, lp(MATCH, dp(4)).also { it.topMargin = dp(8) })
@@ -1447,8 +1455,8 @@ jobs:
                   if (favs.isNotEmpty()) {
                       val fr = LinearLayout(this)
                       fr.gravity = Gravity.CENTER_VERTICAL
-                      fr.addView(tv(this, "Yêu thích", 14f, P.text, true), lp(0, WRAP, 1f))
-                      val fa = tv(this, "Xem tất cả", 13f, P.accent, true)
+                      fr.addView(tv(this, "Yêu thích", 14f, cText, true), lp(0, WRAP, 1f))
+                      val fa = tv(this, "Xem tất cả", 13f, cAcc, true)
                       fa.setPadding(dp(8), dp(8), 0, dp(8))
                       fa.setOnClickListener { openFavorites() }
                       fr.addView(fa)
@@ -1457,12 +1465,12 @@ jobs:
                       for (fv in favs) {
                           val r = LinearLayout(this)
                           r.orientation = LinearLayout.VERTICAL
-                          r.background = rr(this, P.surface, 14, P.line)
+                          r.background = rr(this, cSurf, 14, cLine)
                           r.setPadding(dp(14), dp(12), dp(14), dp(12))
-                          val t1 = tv(this, fv.first, 14f, P.text, true); t1.maxLines = 1
+                          val t1 = tv(this, fv.first, 14f, cText, true); t1.maxLines = 1
                           t1.ellipsize = android.text.TextUtils.TruncateAt.END
                           r.addView(t1)
-                          r.addView(tv(this, hostOf(fv.second), 12f, P.muted))
+                          r.addView(tv(this, hostOf(fv.second), 12f, cMuted))
                           r.setOnClickListener { go(fv.second) }
                           val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
                           body.addView(r, rp)
@@ -1474,8 +1482,8 @@ jobs:
                   if (hist.isNotEmpty()) {
                       val hr = LinearLayout(this)
                       hr.gravity = Gravity.CENTER_VERTICAL
-                      hr.addView(tv(this, "Xem gần đây", 14f, P.text, true), lp(0, WRAP, 1f))
-                      val all = tv(this, "Xem tất cả", 13f, P.accent, true)
+                      hr.addView(tv(this, "Xem gần đây", 14f, cText, true), lp(0, WRAP, 1f))
+                      val all = tv(this, "Xem tất cả", 13f, cAcc, true)
                       all.setPadding(dp(8), dp(8), 0, dp(8))
                       all.setOnClickListener { openHistory() }
                       hr.addView(all)
@@ -1484,19 +1492,27 @@ jobs:
                       for (hh in hist) {
                           val r = LinearLayout(this)
                           r.orientation = LinearLayout.VERTICAL
-                          r.background = rr(this, P.surface, 14, P.line)
+                          r.background = rr(this, cSurf, 14, cLine)
                           r.setPadding(dp(14), dp(12), dp(14), dp(12))
-                          val t1 = tv(this, hh.title.ifBlank { hh.url }, 14f, P.text, true); t1.maxLines = 1
+                          val t1 = tv(this, hh.title.ifBlank { hh.url }, 14f, cText, true); t1.maxLines = 1
                           t1.ellipsize = android.text.TextUtils.TruncateAt.END
                           r.addView(t1)
-                          r.addView(tv(this, hostOf(hh.url), 12f, P.muted))
+                          r.addView(tv(this, hostOf(hh.url), 12f, cMuted))
                           r.setOnClickListener { go(hh.url) }
                           val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
                           body.addView(r, rp)
                       }
                   }
                   sv.addView(col)
-                  return sv
+                  val wrap = FrameLayout(this)
+                  if (wp != null) {
+                      val iv = ImageView(this)
+                      iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                      iv.setImageDrawable(wp)
+                      wrap.addView(iv, FrameLayout.LayoutParams(MATCH, MATCH))
+                  }
+                  wrap.addView(sv, FrameLayout.LayoutParams(MATCH, MATCH))
+                  return wrap
               }
 
               private fun addShortcutDialog() {
@@ -1606,7 +1622,7 @@ jobs:
                           tab.blocked = 0
                           tab.popups = 0
                           tab.trackers = 0
-                          injectGuards(view, url)
+                          injectGuards(view, url); injectExt(view, url)
                           CookieManager.getInstance().setAcceptThirdPartyCookies(view, !(tpcBlock && !exc.contains(hostOf(url))))
                           if (tabs.getOrNull(cur) === tab) {
                               if (!urlEdit.hasFocus()) urlEdit.setText(url)
@@ -1619,8 +1635,9 @@ jobs:
                           tab.title = view.title ?: url
                           if (Store.saveHist(this@MainActivity) && url.startsWith("http")) Store.addHistory(this@MainActivity, tab.title, url)
                           tab.pendingHttp = null
-                          injectGuards(view, url)
+                          injectGuards(view, url); injectExt(view, url)
                           if (adOn && !exc.contains(hostOf(url))) view.evaluateJavascript(AdBlock.cosmeticJs(adLevel), null)
+                          injectScripts(view, url)
                           scanVideos(tab)
                           main.postDelayed({ scanVideos(tab) }, 3000)
                           if (tabs.getOrNull(cur) === tab) updateNav()
@@ -1661,7 +1678,7 @@ jobs:
                       override fun onProgressChanged(view: WebView, p: Int) {
                           tab.progress = p
                           if (p in 20..60) {
-                              injectGuards(view, tab.url)
+                              injectGuards(view, tab.url); injectExt(view, tab.url)
                               if (adOn && !exc.contains(hostOf(tab.url))) view.evaluateJavascript(AdBlock.cosmeticJs(adLevel), null)
                           }
                           if (tabs.getOrNull(cur) === tab) progressBar.scaleX = if (p in 1..99) p / 100f else 0f
@@ -1985,6 +2002,24 @@ jobs:
                   if (requestCode == 77) {
                       fileCb?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data))
                       fileCb = null
+                  } else if (requestCode == 78) {
+                      val u = data?.data
+                      if (resultCode == Activity.RESULT_OK && u != null) {
+                          Thread {
+                              val ok = Wall.saveImage(this, u)
+                              runOnUiThread {
+                                  if (ok) { Store.setWpMode(this, 2); wpRefresh?.invoke(); showTab() } else toast("Không đọc được ảnh này")
+                              }
+                          }.start()
+                      }
+                  } else if (requestCode == 79) {
+                      val u = data?.data
+                      if (resultCode == Activity.RESULT_OK && u != null) {
+                          try {
+                              val txt = contentResolver.openInputStream(u)?.use { it.readBytes().take(500000).toByteArray().toString(Charsets.UTF_8) } ?: ""
+                              if (txt.isBlank()) toast("File trống") else scriptDialog(null, txt)
+                          } catch (e: Exception) { toast("Không đọc được file") }
+                      }
                   } else super.onActivityResult(requestCode, resultCode, data)
               }
 
@@ -2078,6 +2113,314 @@ jobs:
                   }
               }
 
+              // ================= hình nền =================
+              private var wpRefresh: (() -> Unit)? = null
+              private var extRefresh: (() -> Unit)? = null
+              private var extTab = 0
+
+              private fun openWallpaper() {
+                  val (f, body) = screen("Hình nền")
+                  f.tag = "wp"
+                  fun render() {
+                      body.removeAllViews()
+                      val mode = Store.wpMode(this)
+
+                      val pvHolder = FrameLayout(this)
+                      fun buildPreview(): View {
+                          val pv = FrameLayout(this)
+                          pv.background = rr(this, P.surface, 20, P.line)
+                          pv.clipToOutline = true
+                          pv.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+                          val d = Wall.drawable(this)
+                          if (d != null) {
+                              val iv = ImageView(this)
+                              iv.scaleType = ImageView.ScaleType.CENTER_CROP
+                              iv.setImageDrawable(d)
+                              pv.addView(iv, FrameLayout.LayoutParams(MATCH, MATCH))
+                          }
+                          val col = if (d != null) Color.WHITE else P.text
+                          val g = tv(this, "Chào buổi sáng", 13f, col, true)
+                          val gp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.START)
+                          gp.setMargins(dp(18), dp(18), 0, 0)
+                          pv.addView(g, gp)
+                          val pill = tv(this, "Tìm kiếm hoặc nhập địa chỉ", 12f, 0xFF4F6B82.toInt())
+                          pill.gravity = Gravity.CENTER_VERTICAL
+                          pill.setPadding(dp(14), 0, dp(14), 0)
+                          pill.background = rr(this, 0xE6FFFFFF.toInt(), 18)
+                          val pp = FrameLayout.LayoutParams(MATCH, dp(36), Gravity.BOTTOM)
+                          pp.setMargins(dp(18), 0, dp(18), dp(18))
+                          pv.addView(pill, pp)
+                          return pv
+                      }
+                      fun refreshPreview() { pvHolder.removeAllViews(); pvHolder.addView(buildPreview(), FrameLayout.LayoutParams(MATCH, MATCH)) }
+                      refreshPreview()
+                      val pvp = lp(MATCH, dp(190)); pvp.topMargin = dp(8)
+                      body.addView(pvHolder, pvp)
+
+                      sSec(body, "Nền có sẵn")
+                      val n = Wall.presets.size + 1
+                      var row: LinearLayout? = null
+                      for (i in 0 until n) {
+                          if (i % 3 == 0) {
+                              row = LinearLayout(this)
+                              val rp = lp(MATCH, WRAP); rp.topMargin = dp(10)
+                              body.addView(row, rp)
+                          }
+                          val tile = FrameLayout(this)
+                          if (i < Wall.presets.size) {
+                              val sel = mode == 1 && Store.wpPreset(this) == i
+                              val g = Wall.gradient(Wall.presets[i])
+                              g.cornerRadius = dp(16).toFloat()
+                              g.setStroke(if (sel) dp(2) else dp(1), if (sel) P.accent else P.line)
+                              tile.background = g
+                              val nm = tv(this, Wall.presets[i].name, 11f, Color.WHITE, true)
+                              val np = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.START)
+                              np.setMargins(dp(10), 0, dp(10), dp(8))
+                              tile.addView(nm, np)
+                              tile.setOnClickListener { Store.setWpMode(this, 1); Store.setWpPreset(this, i); render() }
+                          } else {
+                              tile.background = rr(this, if (mode == 2) (P.accent and 0x00FFFFFF) or 0x33000000 else P.surface, 16, P.accent)
+                              val c = LinearLayout(this)
+                              c.orientation = LinearLayout.VERTICAL
+                              c.gravity = Gravity.CENTER
+                              val im = ImageView(this)
+                              im.setImageResource(R.drawable.ic_m_img)
+                              im.setColorFilter(P.accent)
+                              c.addView(im, lp(dp(22), dp(22)))
+                              val lb = tv(this, "Ảnh của bạn", 11f, P.accent, true)
+                              val lq = lp(WRAP, WRAP); lq.topMargin = dp(4)
+                              c.addView(lb, lq)
+                              tile.addView(c, FrameLayout.LayoutParams(MATCH, MATCH))
+                              tile.setOnClickListener {
+                                  try {
+                                      val i2 = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                                      i2.addCategory(Intent.CATEGORY_OPENABLE)
+                                      i2.type = "image/*"
+                                      startActivityForResult(i2, 78)
+                                  } catch (e: Exception) { toast("Không mở được thư viện ảnh") }
+                              }
+                          }
+                          val q = lp(0, dp(84), 1f)
+                          if (i % 3 > 0) q.leftMargin = dp(10)
+                          row!!.addView(tile, q)
+                      }
+                      val rem = n % 3
+                      if (rem != 0) for (k in 0 until 3 - rem) { val q = lp(0, 1, 1f); q.leftMargin = dp(10); row!!.addView(View(this), q) }
+
+                      fun slider(title: String, value: Int, max: Int, enabled: Boolean, done: (Int) -> Unit) {
+                          val head = LinearLayout(this)
+                          head.gravity = Gravity.CENTER_VERTICAL
+                          head.addView(tv(this, title, 14f, if (enabled) P.text else P.muted, true), lp(0, WRAP, 1f))
+                          val vt = tv(this, "$value%", 13f, P.muted)
+                          head.addView(vt)
+                          val hp = lp(MATCH, WRAP); hp.topMargin = dp(18)
+                          body.addView(head, hp)
+                          val sb = SeekBar(this)
+                          sb.max = max
+                          sb.progress = value
+                          sb.isEnabled = enabled
+                          sb.progressTintList = android.content.res.ColorStateList.valueOf(P.accent)
+                          sb.thumbTintList = android.content.res.ColorStateList.valueOf(P.accent)
+                          sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                              override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) { vt.text = "$p%" }
+                              override fun onStartTrackingTouch(s: SeekBar?) {}
+                              override fun onStopTrackingTouch(s: SeekBar?) { done(sb.progress); refreshPreview() }
+                          })
+                          body.addView(sb, lp(MATCH, WRAP))
+                      }
+                      slider("Độ mờ", Store.wpBlur(this), 100, mode == 2) { Store.setWpBlur(this, it) }
+                      if (mode != 2) body.addView(tv(this, "Độ mờ chỉ áp dụng cho ảnh của bạn.", 12f, P.muted))
+                      slider("Độ tối", Store.wpDim(this), 80, mode != 0) { Store.setWpDim(this, it) }
+
+                      if (mode != 0) {
+                          val rb = btn(this, "Gỡ hình nền", P.surface, P.text, P.line) { Store.setWpMode(this, 0); render() }
+                          val rp = lp(MATCH, WRAP); rp.topMargin = dp(24)
+                          body.addView(rb, rp)
+                      }
+                      body.addView(tv(this, "Hình nền chỉ hiện ở trang chủ (tab mới). Trang web vẫn hiển thị bình thường. Ảnh được chép vào bộ nhớ app, không tải lên đâu cả.", 12f, P.muted).also { it.setPadding(0, dp(16), 0, 0) })
+                  }
+                  wpRefresh = { render() }
+                  render()
+                  pushOverlay(f)
+              }
+
+              // ================= tiện ích =================
+              private fun injectExt(view: WebView, url: String) {
+                  if (!url.startsWith("http")) return
+                  val js = Ext.js(this, hostOf(url))
+                  if (js.isNotEmpty()) view.evaluateJavascript(js, null)
+              }
+
+              private fun injectScripts(view: WebView, url: String) {
+                  if (!url.startsWith("http")) return
+                  for (j in Ext.scriptJs(this, hostOf(url))) view.evaluateJavascript(j, null)
+              }
+
+              private fun smallBtn(label: String, color: Int, a: () -> Unit): TextView {
+                  val b = tv(this, label, 12f, color, true)
+                  b.gravity = Gravity.CENTER
+                  b.setPadding(dp(12), 0, dp(12), 0)
+                  b.minHeight = dp(32)
+                  b.background = rr(this, P.bg, 16, P.line)
+                  b.setOnClickListener { a() }
+                  return b
+              }
+
+              private fun openExtensions() {
+                  val (f, body) = screen("Tiện ích")
+                  f.tag = "ext"
+                  fun render() {
+                      body.removeAllViews()
+                      val seg = segmented(this, listOf("Có sẵn", "Userscript"), extTab) { extTab = it; render() }
+                      val sp = lp(MATCH, WRAP); sp.topMargin = dp(8); sp.bottomMargin = dp(8)
+                      body.addView(seg, sp)
+                      if (extTab == 0) {
+                          for (d in Ext.defs) {
+                              val r = LinearLayout(this)
+                              r.gravity = Gravity.CENTER_VERTICAL
+                              r.background = rr(this, P.surface, 16, P.line)
+                              r.setPadding(dp(14), dp(12), dp(14), dp(12))
+                              val ib = FrameLayout(this)
+                              ib.background = rr(this, P.bg, 13, P.line)
+                              val im = ImageView(this)
+                              im.setImageResource(d.icon)
+                              im.setColorFilter(P.accent)
+                              ib.addView(im, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+                              r.addView(ib, lp(dp(40), dp(40)))
+                              val c = LinearLayout(this)
+                              c.orientation = LinearLayout.VERTICAL
+                              c.addView(tv(this, d.title, 14f, P.text, true))
+                              c.addView(tv(this, d.sub, 12f, P.muted))
+                              val cp = lp(0, WRAP, 1f); cp.leftMargin = dp(12); cp.rightMargin = dp(8)
+                              r.addView(c, cp)
+                              r.addView(styledSwitch(this, Ext.globalOn(this, d.id)) { Ext.setGlobal(this, d.id, it) })
+                              val rp = lp(MATCH, WRAP); rp.bottomMargin = dp(8)
+                              body.addView(r, rp)
+                          }
+                          body.addView(tv(this, "Công tắc ở đây áp dụng cho mọi trang. Muốn bật hoặc tắt riêng một trang, mở menu ⋮ rồi chọn \"Tiện ích trên trang\". Thay đổi có hiệu lực sau khi tải lại trang.", 12f, P.muted).also { it.setPadding(0, dp(8), 0, 0) })
+                      } else {
+                          val list = Ext.scripts(this)
+                          if (list.isEmpty()) body.addView(tv(this, "Chưa có script nào. Dán mã hoặc mở file .user.js để thêm.", 13f, P.muted).also { it.setPadding(0, dp(4), 0, dp(8)) })
+                          for (s in list) {
+                              val card = LinearLayout(this)
+                              card.orientation = LinearLayout.VERTICAL
+                              card.background = rr(this, P.surface, 16, P.line)
+                              card.setPadding(dp(14), dp(12), dp(14), dp(12))
+                              val r1 = LinearLayout(this)
+                              r1.gravity = Gravity.CENTER_VERTICAL
+                              val c = LinearLayout(this)
+                              c.orientation = LinearLayout.VERTICAL
+                              c.addView(tv(this, s.name, 14f, P.text, true))
+                              c.addView(tv(this, "Áp dụng: " + s.match, 12f, P.muted))
+                              val cp = lp(0, WRAP, 1f); cp.rightMargin = dp(8)
+                              r1.addView(c, cp)
+                              r1.addView(styledSwitch(this, s.enabled) { Ext.setEnabled(this, s.id, it) })
+                              card.addView(r1)
+                              val r2 = LinearLayout(this)
+                              r2.addView(smallBtn("Sửa", P.accent) { scriptDialog(s, null) })
+                              val dq = lp(WRAP, WRAP); dq.leftMargin = dp(8)
+                              r2.addView(smallBtn("Xóa", P.muted) {
+                                  dlg().setMessage("Xóa script \"${s.name}\"?").setPositiveButton("Xóa") { _, _ -> Ext.remove(this, s.id); render() }.setNegativeButton("Hủy", null).show()
+                              }, dq)
+                              val r2p = lp(MATCH, WRAP); r2p.topMargin = dp(10)
+                              card.addView(r2, r2p)
+                              val cq = lp(MATCH, WRAP); cq.bottomMargin = dp(8)
+                              body.addView(card, cq)
+                          }
+                          val br = LinearLayout(this)
+                          br.addView(btn(this, "Dán mã script", P.accent, P.onAccent, 0) { scriptDialog(null, null) }, lp(0, WRAP, 1f))
+                          val b2 = lp(0, WRAP, 1f); b2.leftMargin = dp(8)
+                          br.addView(btn(this, "Mở file .user.js", P.surface, P.text, P.line) {
+                              try {
+                                  val i2 = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                                  i2.addCategory(Intent.CATEGORY_OPENABLE)
+                                  i2.type = "*/*"
+                                  startActivityForResult(i2, 79)
+                              } catch (e: Exception) { toast("Không mở được trình chọn file") }
+                          }, b2)
+                          val brp = lp(MATCH, WRAP); brp.topMargin = dp(8)
+                          body.addView(br, brp)
+                          body.addView(tv(this, "Chỉ cài script từ nguồn bạn tin tưởng: script chạy được trên mọi trang nó khai báo và đọc được nội dung trang đó. Script chạy khi trang tải xong; tên và trang áp dụng được đọc từ dòng // @name và // @match nếu có.", 12f, P.muted).also { it.setPadding(0, dp(14), 0, 0) })
+                      }
+                  }
+                  extRefresh = { render() }
+                  render()
+                  pushOverlay(f)
+              }
+
+              private fun scriptDialog(existing: UScript?, presetCode: String?) {
+                  val box = LinearLayout(this)
+                  box.orientation = LinearLayout.VERTICAL
+                  box.setPadding(dp(20), dp(8), dp(20), 0)
+                  val n = EditText(this); n.hint = "Tên script"
+                  val m = EditText(this); m.hint = "Trang áp dụng (vd: youtube.com, *.abc.com, * = mọi trang)"
+                  val cd = EditText(this)
+                  cd.hint = "Mã JavaScript"
+                  cd.minLines = 8
+                  cd.gravity = Gravity.TOP
+                  cd.textSize = 12f
+                  cd.typeface = android.graphics.Typeface.MONOSPACE
+                  cd.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                  if (existing != null) { n.setText(existing.name); m.setText(existing.match); cd.setText(Ext.code(this, existing.id)) }
+                  else if (presetCode != null) {
+                      cd.setText(presetCode)
+                      val h = Ext.parseHeader(presetCode)
+                      n.setText(h.first); m.setText(h.second)
+                  }
+                  box.addView(n); box.addView(m); box.addView(cd)
+                  val sv = ScrollView(this)
+                  sv.addView(box)
+                  dlg().setTitle(if (existing == null) "Thêm userscript" else "Sửa userscript").setView(sv)
+                      .setPositiveButton("Lưu") { _, _ ->
+                          val code = cd.text.toString()
+                          if (code.isBlank()) { toast("Chưa có mã script"); return@setPositiveButton }
+                          val h = Ext.parseHeader(code)
+                          val name = n.text.toString().trim().ifEmpty { h.first.ifEmpty { "Script" } }
+                          val match = m.text.toString().trim().ifEmpty { h.second }
+                          if (match.isEmpty()) { toast("Hãy nhập trang áp dụng"); return@setPositiveButton }
+                          Ext.save(this, UScript(existing?.id ?: Ext.newId(), name, existing?.enabled ?: true, match), code)
+                          extRefresh?.invoke()
+                      }.setNegativeButton("Hủy", null).show()
+              }
+
+              private fun openSiteExt() {
+                  val t = tabs[cur]
+                  val h = hostOf(t.url)
+                  val (f, panel, _) = sheet()
+                  val head = LinearLayout(this)
+                  head.gravity = Gravity.CENTER_VERTICAL
+                  val hc = LinearLayout(this)
+                  hc.orientation = LinearLayout.VERTICAL
+                  hc.addView(tv(this, "Tiện ích trên trang này", 16f, P.text, true))
+                  hc.addView(tv(this, h.ifEmpty { "Trang này" }, 12f, P.muted))
+                  head.addView(hc, lp(0, WRAP, 1f))
+                  val mg = tv(this, "Quản lý", 13f, P.accent, true)
+                  mg.setPadding(dp(8), dp(12), dp(4), dp(12))
+                  mg.setOnClickListener { popOverlay(); openExtensions() }
+                  head.addView(mg)
+                  panel.addView(head)
+                  for (d in Ext.defs) {
+                      val r = LinearLayout(this)
+                      r.gravity = Gravity.CENTER_VERTICAL
+                      r.background = rr(this, P.bg, 14, P.line)
+                      r.setPadding(dp(12), dp(8), dp(12), dp(8))
+                      val im = ImageView(this)
+                      im.setImageResource(d.icon)
+                      im.setColorFilter(P.accent)
+                      r.addView(im, lp(dp(20), dp(20)))
+                      val tt = tv(this, d.title, 14f, P.text, true)
+                      val tp = lp(0, WRAP, 1f); tp.leftMargin = dp(12); tp.rightMargin = dp(8)
+                      r.addView(tt, tp)
+                      r.addView(styledSwitch(this, Ext.on(this, h, d.id)) { Ext.setSite(this, h, d.id, it); t.web?.reload() })
+                      val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
+                      panel.addView(r, rp)
+                  }
+                  val note = tv(this, "Trang sẽ tự tải lại khi bạn đổi. Userscript quản lý trong mục Tiện ích.", 12f, P.muted)
+                  val np = lp(MATCH, WRAP); np.topMargin = dp(12)
+                  panel.addView(note, np)
+                  pushOverlay(f)
+              }
+
               // ================= lớp phủ =================
               private fun pushOverlay(v: View) {
                   overlays.add(v)
@@ -2089,6 +2432,8 @@ jobs:
                   if (overlays.isEmpty()) return
                   val v = overlays.removeAt(overlays.size - 1)
                   if (v.tag == "dl") dlRefresh = null
+                  if (v.tag == "wp") wpRefresh = null
+                  if (v.tag == "ext") extRefresh = null
                   root.removeView(v)
                   showTab()
               }
@@ -2165,6 +2510,9 @@ jobs:
                       MenuItem("zoom", R.drawable.ic_m_zoom, "Cỡ chữ (${Store.textZoom(this)}%)", on) { openTextSize() },
                       MenuItem("desk", if (t.desktop) R.drawable.ic_m_phone else R.drawable.ic_m_desk, if (t.desktop) "Bản di động" else "Bản máy tính", on) { toggleDesktop() },
                       MenuItem("reload", R.drawable.ic_m_reload, "Làm mới trang", on) { t.web?.reload() },
+                      MenuItem("extsite", R.drawable.ic_m_ext, "Tiện ích trên trang", on) { openSiteExt() },
+                      MenuItem("exts", R.drawable.ic_m_ext, "Tiện ích", true) { openExtensions() },
+                      MenuItem("wall", R.drawable.ic_m_img, "Hình nền", true) { openWallpaper() },
                       MenuItem("favs", R.drawable.ic_m_favs, "Yêu thích", true) { openFavorites() },
                       MenuItem("dl", R.drawable.ic_m_dl, "Tải xuống", true) { openDownloads() },
                       MenuItem("hist", R.drawable.ic_m_hist, "Lịch sử", true) { openHistory() },
@@ -2827,6 +3175,9 @@ jobs:
                   val zp = lp(MATCH, WRAP); zp.topMargin = dp(4); zp.bottomMargin = dp(8)
                   body.addView(zb, zp)
                   sSeg(body, listOf("Sáng", "Tối", "Hệ thống"), Store.theme(this)) { Store.setTheme(this, it); saveTabs(); recreate() }
+                  val wb = btn(this, "Hình nền trang chủ", P.surface, P.text, P.line) { openWallpaper() }
+                  val wbp = lp(MATCH, WRAP); wbp.topMargin = dp(8); wbp.bottomMargin = dp(8)
+                  body.addView(wb, wbp)
                   sSw(body, "Hiệu ứng 3D", "Bong bóng video xoay nghiêng 3D. Tắt nếu máy chậm.", fx3d) { Store.setFx3d(this, it); fx3d = it }
 
               }
@@ -3308,6 +3659,21 @@ jobs:
               fun transLang(c: Context) = sp(c).getInt("transLang", 0)
               fun setTransLang(c: Context, v: Int) = sp(c).edit().putInt("transLang", v).apply()
 
+              // hình nền trang chủ: 0 không, 1 nền có sẵn, 2 ảnh của bạn
+              fun wpMode(c: Context) = sp(c).getInt("wpMode", 0)
+              fun setWpMode(c: Context, v: Int) = sp(c).edit().putInt("wpMode", v).apply()
+              fun wpPreset(c: Context) = sp(c).getInt("wpPreset", 0)
+              fun setWpPreset(c: Context, v: Int) = sp(c).edit().putInt("wpPreset", v).apply()
+              fun wpBlur(c: Context) = sp(c).getInt("wpBlur", 20)
+              fun setWpBlur(c: Context, v: Int) = sp(c).edit().putInt("wpBlur", v).apply()
+              fun wpDim(c: Context) = sp(c).getInt("wpDim", 25)
+              fun setWpDim(c: Context, v: Int) = sp(c).edit().putInt("wpDim", v).apply()
+
+              fun intVal(c: Context, k: String, d: Int) = sp(c).getInt(k, d)
+              fun setIntVal(c: Context, k: String, v: Int) = sp(c).edit().putInt(k, v).apply()
+              fun str(c: Context, k: String, d: String) = sp(c).getString(k, d) ?: d
+              fun setStr(c: Context, k: String, v: String) = sp(c).edit().putString(k, v).apply()
+
               fun flag(c: Context, k: String, d: Boolean) = sp(c).getBoolean(k, d)
               fun setFlag(c: Context, k: String, v: Boolean) = sp(c).edit().putBoolean(k, v).apply()
 
@@ -3429,6 +3795,253 @@ jobs:
 
               fun saveDls(c: Context, l: List<Triple<String, String, String>>) {
                   sp(c).edit().putString("dls", l.joinToString("\n") { "${it.first.replace('\t', ' ')}\t${it.second}\t${it.third}" }).apply()
+              }
+          }
+          AMLICH_EOF
+          cat > "app/src/main/java/vn/luot/app/Wall.kt" <<'AMLICH_EOF'
+          package vn.luot.app
+
+          import android.content.Context
+          import android.graphics.Bitmap
+          import android.graphics.BitmapFactory
+          import android.graphics.Canvas
+          import android.graphics.Matrix
+          import android.graphics.Paint
+          import android.graphics.drawable.BitmapDrawable
+          import android.graphics.drawable.ColorDrawable
+          import android.graphics.drawable.Drawable
+          import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.LayerDrawable
+          import android.net.Uri
+          import java.io.File
+
+          class WallPreset(val name: String, val colors: IntArray)
+
+          object Wall {
+              val presets = listOf(
+                  WallPreset("Hoàng hôn", intArrayOf(0xFFFF9A6B.toInt(), 0xFFC2477A.toInt(), 0xFF2B2A5E.toInt())),
+                  WallPreset("Biển đêm", intArrayOf(0xFF2FB5A0.toInt(), 0xFF145A7A.toInt(), 0xFF0A2540.toInt())),
+                  WallPreset("Rừng sớm", intArrayOf(0xFF7BC47F.toInt(), 0xFF1E5F4B.toInt(), 0xFF0F2E2E.toInt())),
+                  WallPreset("Cực quang", intArrayOf(0xFF5EE0B5.toInt(), 0xFF6B5BFF.toInt(), 0xFF1A1240.toInt())),
+                  WallPreset("Than đá", intArrayOf(0xFF3A4552.toInt(), 0xFF1B2733.toInt(), 0xFF0B1622.toInt()))
+              )
+
+              private var cacheKey = ""
+              private var cacheBmp: Bitmap? = null
+
+              private fun file(ctx: Context) = File(ctx.filesDir, "wallpaper.jpg")
+
+              fun gradient(p: WallPreset): GradientDrawable =
+                  GradientDrawable(GradientDrawable.Orientation.TL_BR, p.colors)
+
+              /** Nền trang chủ (đã gồm độ tối). null nếu không dùng hình nền. */
+              fun drawable(ctx: Context): Drawable? {
+                  val mode = Store.wpMode(ctx)
+                  if (mode == 0) return null
+                  val base: Drawable = if (mode == 2) {
+                      val b = bitmap(ctx) ?: return null
+                      BitmapDrawable(ctx.resources, b)
+                  } else {
+                      gradient(presets[Store.wpPreset(ctx).coerceIn(0, presets.size - 1)])
+                  }
+                  val a = (Store.wpDim(ctx).coerceIn(0, 80) * 255 / 100)
+                  return LayerDrawable(arrayOf(base, ColorDrawable(a shl 24)))
+              }
+
+              private fun bitmap(ctx: Context): Bitmap? {
+                  val f = file(ctx)
+                  if (!f.exists()) return null
+                  val dm = ctx.resources.displayMetrics
+                  val tw = dm.widthPixels * 2 / 3
+                  val th = dm.heightPixels * 2 / 3
+                  val blur = Store.wpBlur(ctx).coerceIn(0, 100)
+                  val key = "${f.lastModified()}_${f.length()}_${tw}x${th}_$blur"
+                  val c = cacheBmp
+                  if (c != null && key == cacheKey && !c.isRecycled) return c
+                  return try {
+                      val o = BitmapFactory.Options()
+                      o.inJustDecodeBounds = true
+                      BitmapFactory.decodeFile(f.path, o)
+                      var ss = 1
+                      while (o.outWidth / (ss * 2) >= tw && o.outHeight / (ss * 2) >= th) ss *= 2
+                      val o2 = BitmapFactory.Options()
+                      o2.inSampleSize = ss
+                      val src = BitmapFactory.decodeFile(f.path, o2) ?: return null
+                      val s = maxOf(tw / src.width.toFloat(), th / src.height.toFloat())
+                      var out = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888)
+                      val m = Matrix()
+                      m.postScale(s, s)
+                      m.postTranslate((tw - src.width * s) / 2f, (th - src.height * s) / 2f)
+                      Canvas(out).drawBitmap(src, m, Paint(Paint.FILTER_BITMAP_FLAG))
+                      src.recycle()
+                      if (blur > 0) {
+                          val k = 1 + blur / 6
+                          val small = Bitmap.createScaledBitmap(out, maxOf(1, tw / k), maxOf(1, th / k), true)
+                          val big = Bitmap.createScaledBitmap(small, tw, th, true)
+                          small.recycle()
+                          out.recycle()
+                          out = big
+                      }
+                      cacheBmp = out
+                      cacheKey = key
+                      out
+                  } catch (e: Throwable) { null }
+              }
+
+              /** Chép ảnh người dùng chọn vào bộ nhớ app (thu nhỏ, JPEG). */
+              fun saveImage(ctx: Context, uri: Uri): Boolean {
+                  return try {
+                      val o = BitmapFactory.Options()
+                      o.inJustDecodeBounds = true
+                      ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, o) }
+                      var ss = 1
+                      while (o.outWidth / (ss * 2) >= 1600 && o.outHeight / (ss * 2) >= 1600) ss *= 2
+                      val o2 = BitmapFactory.Options()
+                      o2.inSampleSize = ss
+                      val b = ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, o2) } ?: return false
+                      file(ctx).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+                      b.recycle()
+                      cacheBmp = null
+                      cacheKey = ""
+                      true
+                  } catch (e: Throwable) { false }
+              }
+          }
+          AMLICH_EOF
+          cat > "app/src/main/java/vn/luot/app/Ext.kt" <<'AMLICH_EOF'
+          package vn.luot.app
+
+          import android.content.Context
+          import org.json.JSONObject
+          import java.io.File
+
+          class UScript(val id: String, var name: String, var enabled: Boolean, var match: String)
+          class ExtDef(val id: String, val title: String, val sub: String, val icon: Int, val def: Boolean)
+
+          object Ext {
+              val defs = listOf(
+                  ExtDef("reader", "Chế độ đọc", "Gỡ thanh điều hướng, cột bên; chữ lớn, nền dịu", R.drawable.ic_m_x_reader, false),
+                  ExtDef("dark", "Nền tối cho mọi trang", "Tự đảo màu trang sáng thành tối", R.drawable.ic_m_x_dark, false),
+                  ExtDef("cookie", "Chặn cookie banner", "Ẩn thông báo cookie che nội dung", R.drawable.ic_m_x_cookie, true),
+                  ExtDef("unlock", "Mở khóa chọn và sao chép", "Cho phép bôi đen, sao chép ở trang chặn", R.drawable.ic_m_x_unlock, false)
+              )
+
+              // ---- bật/tắt: chung và theo từng trang ----
+              fun globalOn(c: Context, id: String) = Store.flag(c, "x_$id", defs.firstOrNull { it.id == id }?.def ?: false)
+              fun setGlobal(c: Context, id: String, v: Boolean) = Store.setFlag(c, "x_$id", v)
+              fun on(c: Context, host: String, id: String): Boolean {
+                  val s = if (host.isEmpty()) -1 else Store.intVal(c, "xs_${host}_$id", -1)
+                  return if (s >= 0) s == 1 else globalOn(c, id)
+              }
+              fun setSite(c: Context, host: String, id: String, v: Boolean) = Store.setIntVal(c, "xs_${host}_$id", if (v) 1 else 0)
+
+              private fun styleJs(id: String, css: String): String =
+                  "(function(){try{var i='luot-x-" + id + "';if(document.getElementById(i))return;var s=document.createElement('style');s.id=i;s.textContent=" +
+                      JSONObject.quote(css) + ";(document.head||document.documentElement).appendChild(s);}catch(e){}})();"
+
+              private const val READER = "header,nav,aside,footer,[role=banner],[role=navigation],[role=complementary],[class*=sidebar],[id*=sidebar],[class*=comment],[id*=comment],[class*=related],[class*=share],[class*=social],[class*=newsletter],[class*=banner]{display:none!important}" +
+                  "html,body{background:#FBF8F1!important;color:#222!important}" +
+                  "body{max-width:720px!important;margin:0 auto!important;padding:16px!important;font-size:19px!important;line-height:1.7!important;font-family:Georgia,serif!important}" +
+                  "img,video{max-width:100%!important;height:auto!important}"
+              private const val DARK = "html{filter:invert(1) hue-rotate(180deg)!important;background:#fff!important}" +
+                  "img,video,picture,canvas,svg{filter:invert(1) hue-rotate(180deg)!important}"
+              private const val COOKIE = "#onetrust-banner-sdk,#onetrust-consent-sdk,.onetrust-pc-dark-filter,#CybotCookiebotDialog,#CybotCookiebotDialogBodyUnderlay,.fc-consent-root," +
+                  "#cookie-banner,#cookie-notice,#cookieNotice,#cookie-consent,#cookieconsent,.cookie-banner,.cookie-notice,.cookie-consent,.cookie-popup,.cc-window,.cc-banner," +
+                  "#gdpr-cookie-notice,.gdpr-banner,[id*=\"cookie-banner\"],[class*=\"cookie-banner\"],[id*=\"cookie-consent\"],[class*=\"cookie-consent\"],[class*=\"CookieConsent\"]," +
+                  "[id*=\"cookiebanner\"],[class*=\"cookiebanner\"],#truste-consent-track,.truste_overlay,#qc-cmp2-container,[id^=\"sp_message_container\"]{display:none!important}" +
+                  "html,body{overflow:auto!important}"
+              private const val UNLOCK_CSS = "*{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}"
+              private const val UNLOCK_JS = "(function(){try{if(window.__luotu)return;window.__luotu=1;['copy','cut','paste','contextmenu','selectstart','dragstart'].forEach(function(e){document.addEventListener(e,function(ev){ev.stopImmediatePropagation();},true);});}catch(e){}})();"
+
+              /** JS của các tiện ích có sẵn đang bật cho trang này. */
+              fun js(c: Context, host: String): String {
+                  val sb = StringBuilder()
+                  if (on(c, host, "reader")) sb.append(styleJs("reader", READER))
+                  if (on(c, host, "dark")) sb.append(styleJs("dark", DARK))
+                  if (on(c, host, "cookie")) sb.append(styleJs("cookie", COOKIE))
+                  if (on(c, host, "unlock")) sb.append(styleJs("unlock", UNLOCK_CSS)).append(UNLOCK_JS)
+                  return sb.toString()
+              }
+
+              // ---- userscript ----
+              fun scripts(c: Context): MutableList<UScript> {
+                  val out = ArrayList<UScript>()
+                  for (line in Store.str(c, "us", "").split("\n")) {
+                      val p = line.split("\t")
+                      if (p.size == 4 && p[0].isNotEmpty()) out.add(UScript(p[0], p[1], p[2] == "1", p[3]))
+                  }
+                  return out
+              }
+
+              private fun saveIdx(c: Context, l: List<UScript>) {
+                  Store.setStr(c, "us", l.joinToString("\n") { "${it.id}\t${it.name.replace('\t', ' ').replace('\n', ' ')}\t${if (it.enabled) "1" else "0"}\t${it.match.replace('\t', ' ').replace('\n', ' ')}" })
+              }
+
+              fun newId(): String = java.lang.Long.toString(System.currentTimeMillis(), 36)
+
+              fun code(c: Context, id: String): String = try { File(c.filesDir, "us_$id.js").readText() } catch (e: Exception) { "" }
+
+              fun save(c: Context, s: UScript, code: String) {
+                  try { File(c.filesDir, "us_${s.id}.js").writeText(code) } catch (e: Exception) { return }
+                  val l = scripts(c)
+                  val i = l.indexOfFirst { it.id == s.id }
+                  if (i >= 0) l[i] = s else l.add(s)
+                  saveIdx(c, l)
+              }
+
+              fun setEnabled(c: Context, id: String, v: Boolean) {
+                  val l = scripts(c)
+                  l.firstOrNull { it.id == id }?.enabled = v
+                  saveIdx(c, l)
+              }
+
+              fun remove(c: Context, id: String) {
+                  try { File(c.filesDir, "us_$id.js").delete() } catch (e: Exception) { }
+                  saveIdx(c, scripts(c).filter { it.id != id })
+              }
+
+              private fun hostMatches(pattern: String, host: String): Boolean {
+                  val p = pattern.trim().lowercase()
+                  if (p.isEmpty()) return false
+                  if (p == "*") return true
+                  if (p.startsWith("*.")) { val b = p.substring(2); return host == b || host.endsWith(".$b") }
+                  return host == p || host.endsWith(".$p")
+              }
+
+              fun matches(s: UScript, host: String): Boolean =
+                  s.match.split(',', ' ', '\n').any { hostMatches(it, host) }
+
+              fun scriptJs(c: Context, host: String): List<String> {
+                  val out = ArrayList<String>()
+                  for (s in scripts(c)) {
+                      if (!s.enabled || !matches(s, host)) continue
+                      val code = code(c, s.id)
+                      if (code.isBlank()) continue
+                      out.add("(function(){try{if(window['__lus_" + s.id + "'])return;window['__lus_" + s.id + "']=1;\n" + code + "\n}catch(e){}})();")
+                  }
+                  return out
+              }
+
+              private fun patToHost(p: String): String {
+                  var s = p.trim()
+                  val i = s.indexOf("://")
+                  if (i >= 0) s = s.substring(i + 3)
+                  s = s.substringBefore('/').substringBefore(':')
+                  if (s != "*" && s.startsWith("*") && !s.startsWith("*.")) s = s.trim('*')
+                  return s.trimEnd('*')
+              }
+
+              /** Đọc tên và trang áp dụng từ phần đầu script (// @name, // @match, // @include). */
+              fun parseHeader(code: String): Pair<String, String> {
+                  var name = ""
+                  val hosts = ArrayList<String>()
+                  val re = Regex("^\\s*//\\s*@(name|match|include)\\s+(.+?)\\s*$")
+                  for (line in code.lineSequence().take(60)) {
+                      val m = re.find(line) ?: continue
+                      if (m.groupValues[1] == "name") { if (name.isEmpty()) name = m.groupValues[2] }
+                      else { val h = patToHost(m.groupValues[2]); if (h.isNotEmpty()) hosts.add(h) }
+                  }
+                  return Pair(name, hosts.distinct().joinToString(","))
               }
           }
           AMLICH_EOF
@@ -3840,6 +4453,21 @@ jobs:
                   android:pathData="M12 4v11M7 11l5 5 5-5M5 20h14" />
           </vector>
           AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_ext.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M10 3h4v3a2 2 0 1 0 4 0 h3v5h-3a2 2 0 1 0 0 4 h3v6h-5v-3a2 2 0 1 0 -4 0 v3H4v-6h3a2 2 0 1 0 0 -4 H4V6h6z" />
+          </vector>
+          AMLICH_EOF
           cat > "app/src/main/res/drawable/ic_m_favs.xml" <<'AMLICH_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -3990,6 +4618,21 @@ jobs:
                   android:pathData="M3 12a9 9 0 1 0 9 -9 9 9 0 0 0 -6.4 2.6 L3 8M3 3v5h5M12 7v5l3 2" />
           </vector>
           AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_img.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M9 9.5h.01" />
+          </vector>
+          AMLICH_EOF
           cat > "app/src/main/res/drawable/ic_m_media.xml" <<'AMLICH_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -4093,6 +4736,66 @@ jobs:
                   android:strokeLineCap="round"
                   android:strokeLineJoin="round"
                   android:pathData="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0 -18 zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_x_cookie.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 3a9 9 0 1 0 9 9 4 4 0 0 1 -4 -4 4 4 0 0 1 -5 -5 zM8.5 11h.01M12 16h.01M15.5 13h.01" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_x_dark.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M20 14.5A8 8 0 0 1 9.5 4 a8 8 0 1 0 10.5 10.5 z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_x_reader.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M4 5h6a2 2 0 0 1 2 2 v13a2 2 0 0 0 -2 -2 H4zM20 5h-6a2 2 0 0 0 -2 2 v13a2 2 0 0 1 2 -2 h6z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_x_unlock.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M7 11V8a5 5 0 0 1 9.5 -2 M5 11h14v10H5zM12 15v2" />
           </vector>
           AMLICH_EOF
           cat > "app/src/main/res/drawable/ic_m_zoom.xml" <<'AMLICH_EOF'
