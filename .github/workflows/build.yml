@@ -1053,7 +1053,7 @@ jobs:
                   root.addView(pullIcon, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
                   bubble = Bubble(this)
                   bubble.visibility = View.GONE
-                  root.addView(bubble, FrameLayout.LayoutParams(dp(76), dp(76)))
+                  root.addView(bubble, FrameLayout.LayoutParams(dp(60), dp(60)))
                   var dx = 0f; var dy = 0f; var sx = 0f; var sy = 0f; var moved = false
                   bubble.setOnTouchListener { v, e ->
                       when (e.action) {
@@ -1075,7 +1075,7 @@ jobs:
                   }
                   bubble.contentDescription = "Video tìm thấy, chạm để xem"
                   root.post {
-                      bubble.x = (root.width - dp(76) - dp(4)).toFloat()
+                      bubble.x = (root.width - dp(60) - dp(4)).toFloat()
                       bubble.y = root.height * 0.3f
                   }
                   setContentView(root)
@@ -2718,71 +2718,178 @@ jobs:
               }
 
               // ---- media sheet ----
+              private fun vIcon(res: Int, tint: Int, sizeDp: Int): ImageView {
+                  val iv = ImageView(this)
+                  iv.setImageResource(res)
+                  iv.setColorFilter(tint)
+                  iv.layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
+                  return iv
+              }
+
+              private fun actionBtn(icon: Int, label: String, fg: Int, stroke: Int, enabled: Boolean, onClick: () -> Unit): LinearLayout {
+                  val b = LinearLayout(this)
+                  b.orientation = LinearLayout.HORIZONTAL
+                  b.gravity = Gravity.CENTER
+                  b.minimumHeight = dp(44)
+                  b.background = rr(this, 0, 12, stroke)
+                  b.addView(vIcon(icon, fg, 16))
+                  val t = tv(this, label, 13f, fg, true)
+                  t.setPadding(dp(6), 0, 0, 0)
+                  b.addView(t)
+                  b.alpha = if (enabled) 1f else 0.5f
+                  if (enabled) b.setOnClickListener { onClick() }
+                  return b
+              }
+
               private fun openMedia() {
                   val t = tabs[cur]
                   scanVideos(t)
                   val (f, panel, _) = sheet()
+                  panel.setPadding(dp(16), dp(10), dp(16), dp(22))
                   val head = LinearLayout(this)
                   head.gravity = Gravity.CENTER_VERTICAL
-                  head.addView(tv(this, "Video tìm thấy (${t.media.size})", 20f, P.text, true), lp(0, WRAP, 1f))
-                  val close = tv(this, "Đóng", 14f, P.accent, true)
-                  close.setPadding(dp(8), dp(12), dp(8), dp(12))
+                  val titles = LinearLayout(this)
+                  titles.orientation = LinearLayout.VERTICAL
+                  val tr = LinearLayout(this)
+                  tr.gravity = Gravity.CENTER_VERTICAL
+                  tr.addView(tv(this, "Video tìm thấy", 20f, P.text, true))
+                  val pill = tv(this, t.media.size.toString(), 13f, P.accent, true)
+                  pill.gravity = Gravity.CENTER
+                  pill.minWidth = dp(24)
+                  pill.setPadding(dp(8), dp(2), dp(8), dp(2))
+                  pill.background = rr(this, (0x2E shl 24) or (P.accent and 0xFFFFFF), 12)
+                  val pp = lp(WRAP, WRAP); pp.leftMargin = dp(10)
+                  tr.addView(pill, pp)
+                  titles.addView(tr)
+                  titles.addView(tv(this, if (t.media.isEmpty()) "Trang này chưa lộ link video" else "Chạm Phát để xem ngay trong app", 13f, P.muted))
+                  head.addView(titles, lp(0, WRAP, 1f))
+                  val close = ImageView(this)
+                  close.setImageResource(R.drawable.ic_v_close)
+                  close.setColorFilter(P.text)
+                  close.setPadding(dp(13), dp(13), dp(13), dp(13))
+                  close.background = rr(this, P.bg, 22, P.line)
+                  close.contentDescription = "Đóng"
                   close.setOnClickListener { popOverlay() }
-                  head.addView(close)
+                  head.addView(close, lp(dp(44), dp(44)))
                   panel.addView(head)
-                  val sv = ScrollView(this)
+
+                  val maxH = (resources.displayMetrics.heightPixels * 0.56f).toInt()
+                  val sv = object : ScrollView(this) {
+                      override fun onMeasure(w: Int, h: Int) {
+                          super.onMeasure(w, View.MeasureSpec.makeMeasureSpec(maxH, View.MeasureSpec.AT_MOST))
+                      }
+                  }
                   val list = LinearLayout(this)
                   list.orientation = LinearLayout.VERTICAL
                   sv.addView(list)
-                  panel.addView(sv, lp(MATCH, WRAP))
+                  val svp = lp(MATCH, WRAP); svp.topMargin = dp(6)
+                  panel.addView(sv, svp)
+
                   if (t.media.isEmpty()) {
-                      list.addView(tv(this, "Chưa thấy video. Hãy bấm phát video trên trang rồi mở lại.", 14f, P.muted))
+                      val box = LinearLayout(this)
+                      box.orientation = LinearLayout.VERTICAL
+                      box.gravity = Gravity.CENTER_HORIZONTAL
+                      box.setPadding(dp(20), dp(26), dp(20), dp(24))
+                      val dash = android.graphics.drawable.GradientDrawable()
+                      dash.setColor(P.bg)
+                      dash.cornerRadius = dp(18).toFloat()
+                      dash.setStroke(dp(1), P.line, dp(6).toFloat(), dp(4).toFloat())
+                      box.background = dash
+                      val ic = ImageView(this)
+                      ic.setImageResource(R.drawable.ic_v_play)
+                      ic.setColorFilter(P.accent)
+                      ic.setPadding(dp(18), dp(18), dp(18), dp(18))
+                      ic.background = rr(this, P.surface, 32, P.accent)
+                      box.addView(ic, lp(dp(64), dp(64)))
+                      val e1 = tv(this, "Chưa thấy video", 17f, P.text, true)
+                      val e1p = lp(WRAP, WRAP); e1p.topMargin = dp(12)
+                      box.addView(e1, e1p)
+                      val e2 = tv(this, "Hãy bấm phát video trên trang rồi mở lại. Bong bóng sẽ tự hiện khi bắt được link.", 14f, P.muted)
+                      e2.gravity = Gravity.CENTER
+                      val e2p = lp(WRAP, WRAP); e2p.topMargin = dp(8)
+                      box.addView(e2, e2p)
+                      val bp = lp(MATCH, WRAP); bp.topMargin = dp(10)
+                      list.addView(box, bp)
                   }
+
                   val ua = t.web?.settings?.userAgentString ?: ""
+                  val thumbA = if (P.dark) 0xFF21425F.toInt() else 0xFFD3E4F2.toInt()
+                  val badgeFg = if (P.dark) 0xFF3A1A00.toInt() else Color.WHITE
                   for (m in t.media) {
                       val card = LinearLayout(this)
                       card.orientation = LinearLayout.VERTICAL
-                      card.background = rr(this, P.bg, 16, P.line)
+                      card.background = rr(this, P.bg, 18, P.line)
                       card.setPadding(dp(12), dp(12), dp(12), dp(12))
+
                       val r1 = LinearLayout(this)
                       r1.gravity = Gravity.CENTER_VERTICAL
-                      val badge = tv(this, m.type, 12f, P.bg, true)
-                      badge.background = rr(this, P.video, 8)
-                      badge.setPadding(dp(8), dp(3), dp(8), dp(3))
-                      r1.addView(badge)
-                      val name = tv(this, Uri.decode(m.url.substringBefore('?').substringAfterLast('/')).take(40), 13f, P.text)
+                      val th = FrameLayout(this)
+                      val tg = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, intArrayOf(thumbA, P.surface))
+                      tg.cornerRadius = dp(10).toFloat()
+                      th.background = tg
+                      val thIc = ImageView(this)
+                      thIc.setImageResource(R.drawable.ic_v_play)
+                      thIc.setColorFilter(P.muted)
+                      th.addView(thIc, FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+                      val badge = tv(this, m.type, 10f, badgeFg, true)
+                      badge.background = rr(this, P.video, 5)
+                      badge.setPadding(dp(6), dp(1), dp(6), dp(1))
+                      val bgp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.START)
+                      bgp.setMargins(dp(4), 0, 0, dp(4))
+                      th.addView(badge, bgp)
+                      r1.addView(th, lp(dp(72), dp(48)))
+
+                      val info = LinearLayout(this)
+                      info.orientation = LinearLayout.VERTICAL
+                      val name = tv(this, Uri.decode(m.url.substringBefore('?').substringAfterLast('/')).take(60), 15f, P.text, true)
                       name.maxLines = 1
-                      val np = lp(0, WRAP, 1f); np.leftMargin = dp(10); np.rightMargin = dp(8)
-                      r1.addView(name, np)
-                      val size = tv(this, if (m.type == "HLS") "Luồng" else if (m.type == "DASH") "Không tải được" else "...", 12f, P.muted)
-                      r1.addView(size)
+                      name.ellipsize = android.text.TextUtils.TruncateAt.END
+                      info.addView(name)
+                      val size = tv(this, if (m.type == "HLS") "Luồng · chọn chất lượng khi tải" else if (m.type == "DASH") "Chưa hỗ trợ tải" else "...", 12f, P.muted)
+                      info.addView(size)
+                      val ip = lp(0, WRAP, 1f); ip.leftMargin = dp(12); ip.rightMargin = dp(8)
+                      r1.addView(info, ip)
+
+                      val play = ImageView(this)
+                      play.setImageResource(R.drawable.ic_v_play)
+                      play.setColorFilter(P.onAccent)
+                      play.setPadding(dp(13), dp(13), dp(13), dp(13))
+                      play.background = rr(this, P.accent, 24)
+                      play.contentDescription = "Phát"
+                      play.setOnClickListener { popOverlay(); playUrl(m, t, ua) }
+                      r1.addView(play, lp(dp(48), dp(48)))
                       card.addView(r1)
+
                       if (m.type != "HLS" && m.type != "DASH") {
                           Thread {
                               val n = Downloader.fetchSize(m.url, m.referer, ua)
                               runOnUiThread { size.text = if (n > 0) String.format(Locale.US, "%.1f MB", n / 1048576.0) else "" }
                           }.start()
                       }
+
                       val r2 = LinearLayout(this)
-                      val rp = lp(MATCH, WRAP); rp.topMargin = dp(10)
-                      val b1 = btn(this, "Phát", P.accent, P.onAccent, 0) { popOverlay(); playUrl(m, t, ua) }
-                      val b2 = btn(this, "Sao chép", P.surface, P.text, P.line) { copy(m.url) }
-                      val b3 = btn(this, "Tải về", P.surface, if (m.type == "DASH") P.muted else P.text, P.line) { popOverlay(); startDownload(m, t) }
-                      val bx = btn(this, "Mở ngoài", P.surface, P.accent, P.accent) { popOverlay(); openExternalVideo(m, t) }
-                      r2.addView(b1, lp(0, WRAP, 1f))
-                      val p2 = lp(0, WRAP, 1f); p2.leftMargin = dp(8); r2.addView(bx, p2)
-                      card.addView(r2, rp)
-                      val r3 = LinearLayout(this)
-                      r3.addView(b2, lp(0, WRAP, 1f))
-                      val p3 = lp(0, WRAP, 1f); p3.leftMargin = dp(8); r3.addView(b3, p3)
-                      val r3p = lp(MATCH, WRAP); r3p.topMargin = dp(8)
-                      card.addView(r3, r3p)
+                      val canDl = m.type != "DASH"
+                      val a1 = actionBtn(R.drawable.ic_v_copy, "Sao chép", P.text, P.line, true) { copy(m.url) }
+                      val a2 = actionBtn(R.drawable.ic_v_dl, "Tải về", if (canDl) P.text else P.muted, P.line, canDl) { popOverlay(); startDownload(m, t) }
+                      val a3 = actionBtn(R.drawable.ic_v_ext, "Mở ngoài", P.accent, P.accent, true) { popOverlay(); openExternalVideo(m, t) }
+                      r2.addView(a1, lp(0, WRAP, 1f))
+                      val q2 = lp(0, WRAP, 1f); q2.leftMargin = dp(8); r2.addView(a2, q2)
+                      val q3 = lp(0, WRAP, 1f); q3.leftMargin = dp(8); r2.addView(a3, q3)
+                      val r2p = lp(MATCH, WRAP); r2p.topMargin = dp(10)
+                      card.addView(r2, r2p)
+
                       val cp = lp(MATCH, WRAP); cp.topMargin = dp(10)
                       list.addView(card, cp)
                   }
-                  val note = tv(this, "Mẹo: nhấn giữ bong bóng để mở thẳng video bằng trình xem ngoài. Video có bảo vệ bản quyền (DRM) hoặc luồng bị mã hóa không thể tải. Chỉ tải nội dung bạn có quyền sử dụng.", 12f, P.muted)
-                  val np = lp(MATCH, WRAP); np.topMargin = dp(12)
-                  panel.addView(note, np)
+
+                  val note = LinearLayout(this)
+                  note.gravity = Gravity.TOP
+                  note.setPadding(dp(4), dp(12), dp(4), 0)
+                  val nic = vIcon(R.drawable.ic_v_info, P.muted, 16)
+                  val nip = LinearLayout.LayoutParams(dp(16), dp(16)); nip.topMargin = dp(1); nip.rightMargin = dp(10)
+                  note.addView(nic, nip)
+                  note.addView(tv(this, "Nhấn giữ bong bóng để mở thẳng bằng trình xem ngoài. Video có DRM hoặc luồng mã hoá không tải được. Chỉ tải nội dung bạn có quyền sử dụng.", 12f, P.muted), lp(0, WRAP, 1f))
+                  panel.addView(note)
                   pushOverlay(f)
               }
 
@@ -4348,6 +4455,8 @@ jobs:
               var count = 0
                   set(v) { field = v; invalidate() }
               private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val path = Path()
+              private val box = RectF()
 
               init {
                   outlineProvider = object : ViewOutlineProvider() {
@@ -4356,47 +4465,57 @@ jobs:
                           o.setOval(ins, ins, v.width - ins, v.height - ins)
                       }
                   }
-                  elevation = context.dp(12).toFloat()
+                  elevation = context.dp(6).toFloat()
                   cameraDistance = 12000f * resources.displayMetrics.density
               }
 
               override fun onDraw(c: Canvas) {
-                  val w = width.toFloat()
-                  val cx = w / 2f
+                  val cx = width / 2f
                   val cy = height / 2f
-                  val r = w / 2f - context.dp(8)
+                  val r = width / 2f - context.dp(8)
+                  val ring = context.dp(2).toFloat()
+                  // nền kính mờ
                   p.style = Paint.Style.FILL
-                  p.shader = RadialGradient(cx - r * 0.3f, cy - r * 0.4f, r * 1.5f,
-                      intArrayOf(0xFFB8E3FF.toInt(), 0xFF5BB4F5.toInt(), 0xFF2677BA.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-                  c.drawCircle(cx, cy, r, p)
                   p.shader = null
-                  p.color = 0x55FFFFFF
-                  c.drawOval(RectF(cx - r * 0.6f, cy - r * 0.9f, cx + r * 0.45f, cy - r * 0.3f), p)
+                  p.color = if (P.dark) 0xD10B1622.toInt() else 0xEBFFFFFF.toInt()
+                  c.drawCircle(cx, cy, r, p)
+                  // viền màu nhấn
                   p.style = Paint.Style.STROKE
-                  p.strokeWidth = r * 0.1f
-                  p.color = 0x33000000
-                  c.drawCircle(cx, cy, r - p.strokeWidth / 2, p)
-                  p.style = Paint.Style.FILL
-                  val tri = Path()
-                  tri.moveTo(cx - r * 0.25f, cy - r * 0.4f); tri.lineTo(cx - r * 0.25f, cy + r * 0.4f); tri.lineTo(cx + r * 0.42f, cy)
-                  tri.close()
-                  c.save(); c.translate(0f, r * 0.06f)
-                  p.color = 0x55000000
-                  c.drawPath(tri, p)
-                  c.restore()
-                  p.color = Color.WHITE
-                  c.drawPath(tri, p)
+                  p.strokeWidth = ring
+                  p.color = P.accent
+                  c.drawCircle(cx, cy, r - ring / 2f, p)
+                  // nút phát bo tròn góc
+                  val s = r * 0.5f
+                  path.reset()
+                  path.moveTo(cx - s * 0.34f, cy - s * 0.62f)
+                  path.lineTo(cx - s * 0.34f, cy + s * 0.62f)
+                  path.lineTo(cx + s * 0.72f, cy)
+                  path.close()
+                  p.style = Paint.Style.FILL_AND_STROKE
+                  p.strokeJoin = Paint.Join.ROUND
+                  p.strokeWidth = r * 0.14f
+                  p.color = P.accent
+                  c.drawPath(path, p)
                   // huy hiệu số lượng
-                  val bx = cx + r * 0.78f
-                  val by = cy - r * 0.78f
-                  val br = context.dp(11).toFloat()
-                  p.color = Color.WHITE
-                  c.drawCircle(bx, by, br, p)
-                  p.color = Color.parseColor("#0B4F85")
-                  p.textSize = br * 1.15f
-                  p.textAlign = Paint.Align.CENTER
+                  val label = count.toString()
+                  p.style = Paint.Style.FILL
+                  p.textSize = context.dp(11).toFloat()
                   p.typeface = Typeface.DEFAULT_BOLD
-                  c.drawText(count.toString(), bx, by + br * 0.4f, p)
+                  p.textAlign = Paint.Align.CENTER
+                  val bh = context.dp(18).toFloat()
+                  val bw = Math.max(bh, p.measureText(label) + context.dp(10))
+                  val bx = Math.min(cx + r * 0.78f, width - bw / 2f - context.dp(1))
+                  val by = cy - r * 0.78f
+                  val gap = context.dp(2).toFloat()
+                  box.set(bx - bw / 2f - gap, by - bh / 2f - gap, bx + bw / 2f + gap, by + bh / 2f + gap)
+                  p.color = if (P.dark) P.bg else Color.WHITE
+                  c.drawRoundRect(box, box.height() / 2f, box.height() / 2f, p)
+                  box.set(bx - bw / 2f, by - bh / 2f, bx + bw / 2f, by + bh / 2f)
+                  p.color = P.accent
+                  c.drawRoundRect(box, bh / 2f, bh / 2f, p)
+                  p.color = P.onAccent
+                  val fm = p.fontMetrics
+                  c.drawText(label, bx, by - (fm.ascent + fm.descent) / 2f, p)
               }
           }
           AMLICH_EOF
@@ -4856,6 +4975,91 @@ jobs:
           </vector>
           AMLICH_EOF
           mkdir -p "app/src/main/res/values"
+          cat > "app/src/main/res/drawable/ic_v_play.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FFFFFF"
+                  android:pathData="M8,5.5v13a1,1 0 0,0 1.5,0.86l10.5,-6.5a1,1 0 0,0 0,-1.72L9.5,4.64A1,1 0 0,0 8,5.5z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_v_close.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="2.2"
+                  android:strokeLineCap="round"
+                  android:pathData="M6,6l12,12M18,6L6,18" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_v_copy.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="2"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M11.5,9h6a2.5,2.5 0 0 1 2.5,2.5v6a2.5,2.5 0 0 1 -2.5,2.5h-6a2.5,2.5 0 0 1 -2.5,-2.5v-6a2.5,2.5 0 0 1 2.5,-2.5zM5,15V6.5A1.5,1.5 0 0 1 6.5,5H15" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_v_dl.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="2"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12,4v11M12,15l-4.5,-4.5M12,15l4.5,-4.5M5,19h14" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_v_ext.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="2"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M14,5h5v5M19,5l-8,8M18,14v4a1.5,1.5 0 0 1 -1.5,1.5h-10A1.5,1.5 0 0 1 5,18V8a1.5,1.5 0 0 1 1.5,-1.5H10" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_v_info.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="2"
+                  android:strokeLineCap="round"
+                  android:pathData="M12,3a9,9 0 1 0 0,18a9,9 0 1 0 0,-18zM12,11v5M12,8v0.01" />
+          </vector>
+          AMLICH_EOF
           cat > "app/src/main/res/values/strings.xml" <<'AMLICH_EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
