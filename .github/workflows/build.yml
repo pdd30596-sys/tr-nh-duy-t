@@ -1260,10 +1260,10 @@ jobs:
               private fun buildHome(): View {
                   val wp = Wall.drawable(this)
                   val glass = wp != null
-                  val cSurf = if (glass) 0x8C132334.toInt() else cSurf
-                  val cLine = if (glass) 0x30FFFFFF else cLine
-                  val cText = if (glass) Color.WHITE else cText
-                  val cMuted = if (glass) 0xFFE3E8F0.toInt() else cMuted
+                  val cSurf = if (glass) 0x8C132334.toInt() else P.surface
+                  val cLine = if (glass) 0x30FFFFFF else P.line
+                  val cText = if (glass) Color.WHITE else P.text
+                  val cMuted = if (glass) 0xFFE3E8F0.toInt() else P.muted
                   val cAcc = if (glass) Color.WHITE else P.accent
                   val sv = ScrollView(this)
                   sv.setBackgroundColor(if (glass) Color.TRANSPARENT else P.bg)
