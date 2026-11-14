@@ -26,8 +26,8 @@ jobs:
                   applicationId "vn.luot.app"
                   minSdk 26
                   targetSdk 34
-                  versionCode 9
-                  versionName "1.8"
+                  versionCode 10
+                  versionName "1.9"
               }
 
               signingConfigs {
@@ -1241,76 +1241,148 @@ jobs:
               }
 
               // ================= trang chủ =================
+              private fun homeIconFor(url: String, label: String): Int? {
+                  val h = hostOf(url)
+                  val l = label.lowercase()
+                  return when {
+                      h.contains("youtube") || h.contains("youtu.be") || h.contains("tiktok") || h.contains("netflix") -> R.drawable.ic_m_h_video
+                      h.contains("facebook") || h.contains("instagram") || h.contains("zalo") || h.contains("twitter") || h == "x.com" -> R.drawable.ic_m_h_social
+                      h.contains("shopee") || h.contains("lazada") || h.contains("tiki") || h.contains("amazon") -> R.drawable.ic_m_h_shop
+                      h.contains("translate") -> R.drawable.ic_m_trans
+                      url.contains("th%E1%BB%9Di") || l.contains("thời tiết") -> R.drawable.ic_m_h_weather
+                      url.contains("/maps") || h.contains("maps") -> R.drawable.ic_m_h_map
+                      h.contains("vnexpress") || h.contains("tuoitre") || h.contains("thanhnien") || h.contains("dantri") || l.contains("tin") -> R.drawable.ic_m_h_news
+                      else -> null
+                  }
+              }
+
               private fun buildHome(): View {
                   val sv = ScrollView(this)
                   sv.setBackgroundColor(P.bg)
                   val col = LinearLayout(this)
                   col.orientation = LinearLayout.VERTICAL
-                  col.setPadding(dp(20), dp(24), dp(20), dp(24))
 
+                  // ---- phần đầu (hero) ----
+                  val heroText = if (P.dark) 0xFFEAF3FB.toInt() else 0xFF0F2A3F.toInt()
+                  val heroSub = if (P.dark) 0xFFCFE8FB.toInt() else 0xFF2A4A66.toInt()
+                  val hero = LinearLayout(this)
+                  hero.orientation = LinearLayout.VERTICAL
+                  hero.setPadding(dp(20), dp(24), dp(20), dp(26))
+                  hero.background = android.graphics.drawable.GradientDrawable(
+                      android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                      intArrayOf(if (P.dark) 0xFF1B4F7A.toInt() else 0xFF9CCBEE.toInt(), if (P.dark) 0xFF0F2C44.toInt() else 0xFFCFE6F7.toInt(), P.bg))
+                  val hr = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                  val greet = if (hr < 11) "Chào buổi sáng" else if (hr < 14) "Chào buổi trưa" else if (hr < 18) "Chào buổi chiều" else "Chào buổi tối"
                   val head = LinearLayout(this)
                   head.gravity = Gravity.CENTER_VERTICAL
-                  head.addView(tv(this, "Trình Duyệt", 24f, P.text, true), lp(0, WRAP, 1f))
-                  val chip = tv(this, "Chặn " + blockedTotal, 13f, P.accent, true)
+                  head.addView(tv(this, greet, 14f, heroSub, true), lp(0, WRAP, 1f))
+                  val chip = tv(this, "Chặn " + blockedTotal, 12f, heroText, true)
                   chip.gravity = Gravity.CENTER
-                  chip.background = rr(this, P.surface, 18, P.line)
-                  chip.setPadding(dp(12), 0, dp(12), 0)
+                  chip.background = rr(this, if (P.dark) 0x4D000000 else 0x66FFFFFF, 15)
+                  chip.setPadding(dp(11), 0, dp(11), 0)
                   chip.setOnClickListener { openSettings() }
-                  head.addView(chip, lp(WRAP, dp(36)))
-                  col.addView(head)
-
-                  val h = tv(this, "Bạn muốn xem gì hôm nay?", 30f, P.text, true)
-                  val hp = lp(MATCH, WRAP); hp.topMargin = dp(48)
-                  col.addView(h, hp)
+                  head.addView(chip, lp(WRAP, dp(30)))
+                  hero.addView(head)
+                  val title = tv(this, "Duyệt web\nnhanh và riêng tư", 28f, heroText, true)
+                  val tp = lp(MATCH, WRAP); tp.topMargin = dp(8)
+                  hero.addView(title, tp)
 
                   val search = EditText(this)
                   search.hint = "Tìm kiếm hoặc nhập địa chỉ"
-                  search.setHintTextColor(P.muted)
-                  search.setTextColor(P.text)
+                  search.setHintTextColor(0xFF4F6B82.toInt())
+                  search.setTextColor(0xFF0F2A3F.toInt())
                   search.textSize = 15f
                   search.isSingleLine = true
-                  search.background = rr(this, P.surface, 26, P.line)
+                  search.background = rr(this, if (P.dark) 0xFFEAF3FB.toInt() else 0xFFFFFFFF.toInt(), 27)
                   search.setPadding(dp(18), 0, dp(18), 0)
+                  search.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_m_find, 0, 0, 0)
+                  search.compoundDrawableTintList = android.content.res.ColorStateList.valueOf(0xFF4F6B82.toInt())
+                  search.compoundDrawablePadding = dp(10)
                   search.imeOptions = EditorInfo.IME_ACTION_GO
                   search.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
                   search.setOnEditorActionListener { _, a, _ ->
                       if (a == EditorInfo.IME_ACTION_GO) { go(search.text.toString()); true } else false
                   }
-                  val sp = lp(MATCH, dp(52)); sp.topMargin = dp(16)
-                  col.addView(search, sp)
+                  val sp = lp(MATCH, dp(54)); sp.topMargin = dp(18)
+                  hero.addView(search, sp)
+                  col.addView(hero, lp(MATCH, WRAP))
 
-                  // lối tắt
+                  val body = LinearLayout(this)
+                  body.orientation = LinearLayout.VERTICAL
+                  body.setPadding(dp(20), 0, dp(20), dp(28))
+                  col.addView(body, lp(MATCH, WRAP))
+                  fun sec(t: String) {
+                      val q = lp(MATCH, WRAP); q.topMargin = dp(22); q.bottomMargin = dp(10)
+                      body.addView(tv(this, t, 15f, P.text, true), q)
+                  }
+
+                  // ---- hàng phím tắt ----
+                  val quick = LinearLayout(this)
+                  quick.orientation = LinearLayout.HORIZONTAL
+                  val qi = listOf(Triple(R.drawable.ic_m_dl, "Tải xuống", { openDownloads() }), Triple(R.drawable.ic_m_hist, "Lịch sử", { openHistory() }),
+                      Triple(R.drawable.ic_m_favs, "Yêu thích", { openFavorites() }), Triple(R.drawable.ic_m_set, "Cài đặt", { openSettings() }))
+                  for (i in qi.indices) {
+                      val q0 = qi[i]
+                      val b = LinearLayout(this)
+                      b.orientation = LinearLayout.VERTICAL
+                      b.gravity = Gravity.CENTER
+                      b.background = rr(this, P.surface, 16, P.line)
+                      val img = ImageView(this)
+                      img.setImageResource(q0.first)
+                      img.setColorFilter(P.accent)
+                      b.addView(img, lp(dp(22), dp(22)))
+                      val lb = tv(this, q0.second, 11f, P.text)
+                      lb.gravity = Gravity.CENTER
+                      lb.maxLines = 1
+                      val lq = lp(WRAP, WRAP); lq.topMargin = dp(6)
+                      b.addView(lb, lq)
+                      b.contentDescription = q0.second
+                      b.setOnClickListener { q0.third() }
+                      val q = lp(0, dp(68), 1f)
+                      if (i > 0) q.leftMargin = dp(10)
+                      quick.addView(b, q)
+                  }
+                  body.addView(quick, lp(MATCH, WRAP))
+
+                  // ---- lối tắt (vuốt ngang) ----
+                  sec("Lối tắt")
+                  val hs = android.widget.HorizontalScrollView(this)
+                  hs.isHorizontalScrollBarEnabled = false
+                  hs.overScrollMode = View.OVER_SCROLL_NEVER
+                  val strip = LinearLayout(this)
+                  strip.orientation = LinearLayout.HORIZONTAL
+                  val pink = if (P.dark) 0xFFF58BB4.toInt() else 0xFFC0477A.toInt()
+                  val purple = if (P.dark) 0xFFA99BFF.toInt() else 0xFF6A55E0.toInt()
+                  val tints = intArrayOf(P.accent, P.video, P.ok, P.star, pink, purple)
                   val sc = Store.shortcuts(this)
                   val items = ArrayList<Pair<String, String>?>()
                   items.addAll(sc)
                   items.add(null)
-                  var row: LinearLayout? = null
                   for (i in items.indices) {
-                      if (i % 4 == 0) {
-                          row = LinearLayout(this)
-                          row.orientation = LinearLayout.HORIZONTAL
-                          val rp = lp(MATCH, WRAP); rp.topMargin = dp(14)
-                          if (i == 0) rp.topMargin = dp(28)
-                          col.addView(row, rp)
-                      }
                       val entry = items[i]
-                      val cell = LinearLayout(this)
-                      cell.orientation = LinearLayout.VERTICAL
-                      cell.gravity = Gravity.CENTER_HORIZONTAL
-                      val tile = tv(this, if (entry == null) "+" else entry.first.take(1).uppercase(), 20f, P.accent, true)
-                      tile.gravity = Gravity.CENTER
-                      tile.background = rr(this, P.surface, 18, P.line)
-                      cell.addView(tile, lp(dp(56), dp(56)))
-                      val lb = tv(this, entry?.first ?: "Thêm", 12f, P.text)
-                      lb.gravity = Gravity.CENTER
+                      val tint = if (entry == null) P.muted else tints[i % tints.size]
+                      val card = LinearLayout(this)
+                      card.orientation = LinearLayout.VERTICAL
+                      card.setPadding(dp(12), dp(12), dp(12), dp(12))
+                      card.background = rr(this, (tint and 0x00FFFFFF) or 0x26000000, 20)
+                      val ico = if (entry == null) R.drawable.ic_m_h_plus else homeIconFor(entry.second, entry.first)
+                      if (ico != null) {
+                          val img = ImageView(this)
+                          img.setImageResource(ico)
+                          img.setColorFilter(tint)
+                          card.addView(img, lp(dp(24), dp(24)))
+                      } else {
+                          card.addView(tv(this, entry!!.first.take(1).uppercase(), 20f, tint, true), lp(WRAP, dp(24)))
+                      }
+                      card.addView(View(this), lp(1, 0, 1f))
+                      val lb = tv(this, entry?.first ?: "Thêm", 12f, P.text, true)
                       lb.maxLines = 1
-                      val lbp = lp(MATCH, WRAP); lbp.topMargin = dp(6)
-                      cell.addView(lb, lbp)
-                      cell.minimumHeight = dp(88)
-                      if (entry == null) cell.setOnClickListener { addShortcutDialog() }
+                      lb.ellipsize = android.text.TextUtils.TruncateAt.END
+                      card.addView(lb, lp(MATCH, WRAP))
+                      if (entry == null) card.setOnClickListener { addShortcutDialog() }
                       else {
-                          cell.setOnClickListener { go(entry.second) }
-                          cell.setOnLongClickListener {
+                          card.setOnClickListener { go(entry.second) }
+                          card.setOnLongClickListener {
                               dlg().setMessage("Xóa lối tắt \"${entry.first}\"?").setPositiveButton("Xóa") { _, _ ->
                                   val l = Store.shortcuts(this); l.removeAll { p -> p.second == entry.second && p.first == entry.first }
                                   Store.saveShortcuts(this, l); showTab()
@@ -1318,10 +1390,57 @@ jobs:
                               true
                           }
                       }
-                      row!!.addView(cell, lp(0, WRAP, 1f))
+                      val q = lp(dp(92), dp(92))
+                      if (i > 0) q.leftMargin = dp(10)
+                      strip.addView(card, q)
                   }
-                  val rem = items.size % 4
-                  if (rem != 0) for (k in 0 until 4 - rem) row!!.addView(View(this), lp(0, 1, 1f))
+                  hs.addView(strip)
+                  body.addView(hs, lp(MATCH, WRAP))
+
+                  // ---- tiếp tục xem ----
+                  val lv = Store.lastVideo(this)
+                  if (lv != null) {
+                      val pos = lv[4].toIntOrNull() ?: 0
+                      val dur = lv[5].toIntOrNull() ?: 0
+                      if (dur > 0 && pos in 1 until dur) {
+                          sec("Tiếp tục xem")
+                          val card = LinearLayout(this)
+                          card.gravity = Gravity.CENTER_VERTICAL
+                          card.background = rr(this, P.surface, 18, P.line)
+                          card.setPadding(dp(10), dp(10), dp(10), dp(10))
+                          val th = FrameLayout(this)
+                          th.background = rr(this, 0xFF2A4A66.toInt(), 12)
+                          val pl = IconView(this, 7)
+                          pl.color = Color.WHITE
+                          th.addView(pl, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER))
+                          card.addView(th, lp(dp(96), dp(60)))
+                          val info = LinearLayout(this)
+                          info.orientation = LinearLayout.VERTICAL
+                          val nm = lv[1].ifBlank { Uri.decode(lv[0].substringBefore('?').substringAfterLast('/')) }
+                          val t1 = tv(this, nm, 13f, P.text, true)
+                          t1.maxLines = 1
+                          t1.ellipsize = android.text.TextUtils.TruncateAt.END
+                          info.addView(t1)
+                          val left = (dur - pos) / 1000
+                          val ls = if (left >= 3600) String.format(Locale.US, "%d:%02d:%02d", left / 3600, (left % 3600) / 60, left % 60) else String.format(Locale.US, "%02d:%02d", left / 60, left % 60)
+                          val t2 = tv(this, "Còn lại $ls", 11f, P.muted)
+                          info.addView(t2, lp(WRAP, WRAP).also { it.topMargin = dp(2) })
+                          val bar = LinearLayout(this)
+                          val bd = View(this); bd.background = rr(this, P.accent, 2)
+                          val bl = View(this); bl.background = rr(this, P.line, 2)
+                          bar.addView(bd, lp(0, dp(4), pos.toFloat()))
+                          bar.addView(bl, lp(0, dp(4), (dur - pos).toFloat()))
+                          info.addView(bar, lp(MATCH, dp(4)).also { it.topMargin = dp(8) })
+                          val ip = lp(0, WRAP, 1f); ip.leftMargin = dp(12)
+                          card.addView(info, ip)
+                          card.setOnClickListener {
+                              val i = Intent(this, PlayerActivity::class.java)
+                              i.putExtra("url", lv[0]).putExtra("referer", lv[2]).putExtra("title", lv[1]).putExtra("ua", lv[3])
+                              startActivity(i)
+                          }
+                          body.addView(card, lp(MATCH, WRAP))
+                      }
+                  }
 
                   // yêu thích
                   val favs = Store.bookmarks(this).take(3)
@@ -1334,7 +1453,7 @@ jobs:
                       fa.setOnClickListener { openFavorites() }
                       fr.addView(fa)
                       val frp = lp(MATCH, WRAP); frp.topMargin = dp(28)
-                      col.addView(fr, frp)
+                      body.addView(fr, frp)
                       for (fv in favs) {
                           val r = LinearLayout(this)
                           r.orientation = LinearLayout.VERTICAL
@@ -1346,7 +1465,7 @@ jobs:
                           r.addView(tv(this, hostOf(fv.second), 12f, P.muted))
                           r.setOnClickListener { go(fv.second) }
                           val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
-                          col.addView(r, rp)
+                          body.addView(r, rp)
                       }
                   }
 
@@ -1361,7 +1480,7 @@ jobs:
                       all.setOnClickListener { openHistory() }
                       hr.addView(all)
                       val hrp = lp(MATCH, WRAP); hrp.topMargin = dp(28)
-                      col.addView(hr, hrp)
+                      body.addView(hr, hrp)
                       for (hh in hist) {
                           val r = LinearLayout(this)
                           r.orientation = LinearLayout.VERTICAL
@@ -1373,7 +1492,7 @@ jobs:
                           r.addView(tv(this, hostOf(hh.url), 12f, P.muted))
                           r.setOnClickListener { go(hh.url) }
                           val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
-                          col.addView(r, rp)
+                          body.addView(r, rp)
                       }
                   }
                   sv.addView(col)
@@ -2895,6 +3014,9 @@ jobs:
               private var showing = true
               private var dragging = false
               private var inPip = false
+              private var refererS = ""
+              private var uaS = ""
+              private var titleS = ""
 
               private val tick = object : Runnable {
                   override fun run() {
@@ -2923,6 +3045,7 @@ jobs:
                   val referer = intent.getStringExtra("referer")
                   val ua = intent.getStringExtra("ua") ?: ""
                   val title = intent.getStringExtra("title") ?: ""
+                  refererS = referer ?: ""; uaS = ua; titleS = title
 
                   val root = FrameLayout(this)
                   root.setBackgroundColor(Color.BLACK)
@@ -3038,7 +3161,7 @@ jobs:
                       vv.start()
                       h.postDelayed({ setShowing(false) }, 2500)
                   }
-                  vv.setOnCompletionListener { Store.setVideoPos(this, url, 0); playBtn.kind = 7; playBtn.invalidate() }
+                  vv.setOnCompletionListener { Store.setVideoPos(this, url, 0); Store.clearLastVideo(this, url); playBtn.kind = 7; playBtn.invalidate() }
                   vv.setOnErrorListener { _, _, _ ->
                       errTv.text = "Không phát được video này.\nVideo có thể bị bảo vệ, cần đăng nhập hoặc định dạng không hỗ trợ.\nThử nút \"App khác\"."
                       errTv.visibility = View.VISIBLE
@@ -3128,7 +3251,14 @@ jobs:
 
               override fun onPause() {
                   super.onPause()
-                  if (prepared && url.isNotEmpty()) Store.setVideoPos(this, url, vv.currentPosition)
+                  if (prepared && url.isNotEmpty()) {
+                      val p = vv.currentPosition
+                      val d = vv.duration
+                      Store.setVideoPos(this, url, p)
+                      if (url.startsWith("http") && d > 0) {
+                          if (p > 3000 && p < d - 3000) Store.setLastVideo(this, url, titleS, refererS, uaS, p, d) else Store.clearLastVideo(this, url)
+                      }
+                  }
               }
 
               override fun onDestroy() {
@@ -3272,6 +3402,20 @@ jobs:
               // ---- vị trí xem video ----
               fun videoPos(c: Context, url: String) = sp(c).getInt("pos_" + url.hashCode(), 0)
               fun setVideoPos(c: Context, url: String, ms: Int) = sp(c).edit().putInt("pos_" + url.hashCode(), ms).apply()
+
+              // video xem dở gần nhất: url, tiêu đề, referer, ua, vị trí, độ dài
+              fun lastVideo(c: Context): List<String>? {
+                  val s = sp(c).getString("lastVideo", null) ?: return null
+                  val p = s.split("\t")
+                  return if (p.size == 6 && p[0].isNotEmpty()) p else null
+              }
+              fun setLastVideo(c: Context, url: String, title: String, referer: String, ua: String, pos: Int, dur: Int) {
+                  val v = listOf(url, title, referer, ua, pos.toString(), dur.toString()).joinToString("\t") { it.replace('\t', ' ').replace('\n', ' ') }
+                  sp(c).edit().putString("lastVideo", v).apply()
+              }
+              fun clearLastVideo(c: Context, url: String) {
+                  if (lastVideo(c)?.get(0) == url) sp(c).edit().remove("lastVideo").apply()
+              }
 
               // ---- tải xuống đã xong ----
               fun dls(c: Context): List<Triple<String, String, String>> {
@@ -3724,6 +3868,111 @@ jobs:
                   android:strokeLineCap="round"
                   android:strokeLineJoin="round"
                   android:pathData="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0 -14 zM21 21l-5-5" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_h_map.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 21s7-6 7-11a7 7 0 1 0 -14 0 c0 5 7 11 7 11zM12 12a2 2 0 1 0 0 -4 2 2 0 0 0 0 4 z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_h_news.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M5 4h12a2 2 0 0 1 2 2 v12a2 2 0 0 1 -2 2 H7a2 2 0 0 1 -2 -2 zM9 8h6M9 12h6M9 16h3" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_h_plus.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 5v14M5 12h14" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_h_shop.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M5 8h14l-1 12H6zM9 8a3 3 0 0 1 6 0" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_h_social.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M16 11a3 3 0 1 0 0 -6 3 3 0 0 0 0 6 zM8 12a3 3 0 1 0 0 -6 3 3 0 0 0 0 6 zM2 20c0-3 3-5 6-5s6 2 6 5M14 15c3 0 8 1 8 5" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_h_video.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0 -18 zM10 8.5v7l6-3.5z" />
+          </vector>
+          AMLICH_EOF
+          cat > "app/src/main/res/drawable/ic_m_h_weather.xml" <<'AMLICH_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="1.8"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M7 18a4 4 0 0 1 0 -8 5 5 0 0 1 9.6 -1 A4.5 4.5 0 0 1 17 18 z" />
           </vector>
           AMLICH_EOF
           cat > "app/src/main/res/drawable/ic_m_hist.xml" <<'AMLICH_EOF'
