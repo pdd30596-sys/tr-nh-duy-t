@@ -1053,19 +1053,25 @@ jobs:
                   root.addView(pullIcon, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
                   bubble = Bubble(this)
                   bubble.visibility = View.GONE
-                  root.addView(bubble, FrameLayout.LayoutParams(dp(76), dp(76)))
+                  val bp = FrameLayout.LayoutParams(WRAP, dp(60), Gravity.BOTTOM or Gravity.END)
+                  bp.bottomMargin = dp(90); bp.rightMargin = dp(8)
+                  root.addView(bubble, bp)
                   var dx = 0f; var dy = 0f; var sx = 0f; var sy = 0f; var moved = false
                   bubble.setOnTouchListener { v, e ->
                       when (e.action) {
-                          MotionEvent.ACTION_DOWN -> { dx = v.x - e.rawX; dy = v.y - e.rawY; sx = e.rawX; sy = e.rawY; moved = false }
+                          MotionEvent.ACTION_DOWN -> { dx = v.x - e.rawX; dy = v.y - e.rawY; sx = e.rawX; sy = e.rawY; moved = false; bubbleLong = false; main.postDelayed(longRun, 550) }
                           MotionEvent.ACTION_MOVE -> {
-                              if (Math.abs(e.rawX - sx) > dp(8) || Math.abs(e.rawY - sy) > dp(8)) moved = true
+                              if (Math.abs(e.rawX - sx) > dp(8) || Math.abs(e.rawY - sy) > dp(8)) { moved = true; main.removeCallbacks(longRun) }
                               if (moved) {
                                   v.x = (e.rawX + dx).coerceIn(0f, (root.width - v.width).toFloat())
                                   v.y = (e.rawY + dy).coerceIn(0f, (root.height - v.height).toFloat())
                               }
                           }
-                          MotionEvent.ACTION_UP -> { if (!moved) openMedia() }
+                          MotionEvent.ACTION_UP -> {
+                              main.removeCallbacks(longRun)
+                              if (!moved && !bubbleLong) { if (Store.flag(this, "bubbleExt", false)) bubbleDirect() else openMedia() }
+                          }
+                          MotionEvent.ACTION_CANCEL -> main.removeCallbacks(longRun)
                       }
                       true
                   }
@@ -1225,15 +1231,16 @@ jobs:
                       }
                       if (fx3d) {
                           if (bubbleAnim == null) {
-                              val a = ObjectAnimator.ofFloat(bubble, "rotationY", -14f, 14f)
-                              a.duration = 2400; a.repeatCount = ObjectAnimator.INFINITE; a.repeatMode = ObjectAnimator.REVERSE
+                              val a = ObjectAnimator.ofPropertyValuesHolder(bubble,
+                                  android.animation.PropertyValuesHolder.ofFloat("scaleX", 1f, 1.05f),
+                                  android.animation.PropertyValuesHolder.ofFloat("scaleY", 1f, 1.05f))
+                              a.duration = 1100; a.repeatCount = ObjectAnimator.INFINITE; a.repeatMode = ObjectAnimator.REVERSE
                               a.interpolator = LinearInterpolator()
                               a.start(); bubbleAnim = a
                           }
-                          bubble.rotationX = 8f
                       } else {
                           bubbleAnim?.cancel(); bubbleAnim = null
-                          bubble.rotationX = 0f; bubble.rotationY = 0f
+                          bubble.scaleX = 1f; bubble.scaleY = 1f
                       }
                   } else {
                       bubble.visibility = View.GONE
@@ -2720,7 +2727,7 @@ jobs:
                   val (f, panel, _) = sheet()
                   val head = LinearLayout(this)
                   head.gravity = Gravity.CENTER_VERTICAL
-                  head.addView(tv(this, "Video tìm thấy (${t.media.size})", 20f, P.text, true), lp(0, WRAP, 1f))
+                  head.addView(tv(this, "Video tìm thấy ${t.media.size}", 18f, P.text, true), lp(0, WRAP, 1f))
                   val close = tv(this, "Đóng", 14f, P.accent, true)
                   close.setPadding(dp(8), dp(12), dp(8), dp(12))
                   close.setOnClickListener { popOverlay() }
@@ -2736,45 +2743,91 @@ jobs:
                   }
                   val ua = t.web?.settings?.userAgentString ?: ""
                   for (m in t.media) {
-                      val card = LinearLayout(this)
-                      card.orientation = LinearLayout.VERTICAL
-                      card.background = rr(this, P.bg, 16, P.line)
-                      card.setPadding(dp(12), dp(12), dp(12), dp(12))
-                      val r1 = LinearLayout(this)
-                      r1.gravity = Gravity.CENTER_VERTICAL
-                      val badge = tv(this, m.type, 12f, P.bg, true)
-                      badge.background = rr(this, P.video, 8)
-                      badge.setPadding(dp(8), dp(3), dp(8), dp(3))
-                      r1.addView(badge)
-                      val name = tv(this, Uri.decode(m.url.substringBefore('?').substringAfterLast('/')).take(40), 13f, P.text)
+                      val row = LinearLayout(this)
+                      row.gravity = Gravity.CENTER_VERTICAL
+                      row.background = rr(this, P.bg, 16, P.line)
+                      row.setPadding(dp(10), dp(10), dp(10), dp(10))
+                      val isHls = m.type == "HLS"
+                      val isDash = m.type == "DASH"
+                      val tile = tv(this, m.type, 11f, if (isHls) P.video else if (isDash) P.muted else P.accent, true)
+                      tile.gravity = Gravity.CENTER
+                      tile.background = rr(this, if (isHls) (P.video and 0x00FFFFFF) or 0x33000000 else if (isDash) P.line else (P.accent and 0x00FFFFFF) or 0x26000000, 12)
+                      row.addView(tile, lp(dp(44), dp(44)))
+                      val col = LinearLayout(this)
+                      col.orientation = LinearLayout.VERTICAL
+                      val name = tv(this, Uri.decode(m.url.substringBefore('?').substringAfterLast('/')).take(60).ifEmpty { t.title }, 13f, P.text, true)
                       name.maxLines = 1
-                      val np = lp(0, WRAP, 1f); np.leftMargin = dp(10); np.rightMargin = dp(8)
-                      r1.addView(name, np)
-                      val size = tv(this, if (m.type == "HLS") "Luồng" else if (m.type == "DASH") "Không tải được" else "...", 12f, P.muted)
-                      r1.addView(size)
-                      card.addView(r1)
-                      if (m.type != "HLS" && m.type != "DASH") {
+                      name.ellipsize = android.text.TextUtils.TruncateAt.END
+                      col.addView(name)
+                      val size = tv(this, if (isHls) "Luồng" else if (isDash) "Không tải được" else "...", 12f, P.muted)
+                      col.addView(size)
+                      val cq = lp(0, WRAP, 1f); cq.leftMargin = dp(10); cq.rightMargin = dp(6)
+                      row.addView(col, cq)
+                      if (!isHls && !isDash) {
                           Thread {
                               val n = Downloader.fetchSize(m.url, m.referer, ua)
                               runOnUiThread { size.text = if (n > 0) String.format(Locale.US, "%.1f MB", n / 1048576.0) else "" }
                           }.start()
                       }
-                      val r2 = LinearLayout(this)
-                      val rp = lp(MATCH, WRAP); rp.topMargin = dp(10)
-                      val b1 = btn(this, "Phát", P.accent, P.onAccent, 0) { popOverlay(); playUrl(m, t, ua) }
-                      val b2 = btn(this, "Sao chép", P.surface, P.text, P.line) { copy(m.url) }
-                      val b3 = btn(this, "Tải về", P.surface, if (m.type == "DASH") P.muted else P.text, P.line) { popOverlay(); startDownload(m, t) }
-                      r2.addView(b1, lp(0, WRAP, 1f))
-                      val p2 = lp(0, WRAP, 1f); p2.leftMargin = dp(8); r2.addView(b2, p2)
-                      val p3 = lp(0, WRAP, 1f); p3.leftMargin = dp(8); r2.addView(b3, p3)
-                      card.addView(r2, rp)
-                      val cp = lp(MATCH, WRAP); cp.topMargin = dp(10)
-                      list.addView(card, cp)
+                      fun circle(bg: Int, stroke: Int, desc: String, alpha: Float, act: () -> Unit, icon: View) {
+                          val c = FrameLayout(this)
+                          c.background = rr(this, bg, 19, stroke)
+                          c.alpha = alpha
+                          c.contentDescription = desc
+                          c.addView(icon)
+                          c.setOnClickListener { act() }
+                          val q = lp(dp(38), dp(38)); q.leftMargin = dp(8)
+                          row.addView(c, q)
+                      }
+                      val play = IconView(this, 7)
+                      play.color = P.onAccent
+                      circle(P.accent, 0, "Phát", 1f, { popOverlay(); playUrl(m, t, ua) }, play.also { it.layoutParams = FrameLayout.LayoutParams(dp(38), dp(38)) })
+                      val ext = ImageView(this)
+                      ext.setImageResource(R.drawable.ic_m_other)
+                      ext.setColorFilter(P.text)
+                      circle(P.surface, P.line, "Mở bằng trình xem ngoài", 1f, { popOverlay(); openExternalVideo(m, t) }, ext.also { it.layoutParams = FrameLayout.LayoutParams(dp(17), dp(17), Gravity.CENTER) })
+                      val dl = ImageView(this)
+                      dl.setImageResource(R.drawable.ic_m_dl)
+                      dl.setColorFilter(P.text)
+                      circle(P.surface, P.line, "Tải về", if (isDash) 0.35f else 1f, { popOverlay(); startDownload(m, t) }, dl.also { it.layoutParams = FrameLayout.LayoutParams(dp(17), dp(17), Gravity.CENTER) })
+                      row.setOnLongClickListener { copy(m.url); true }
+                      val rp = lp(MATCH, WRAP); rp.topMargin = dp(8)
+                      list.addView(row, rp)
                   }
-                  val note = tv(this, "Video có bảo vệ bản quyền (DRM) hoặc luồng bị mã hóa không thể tải. Chỉ tải nội dung bạn có quyền sử dụng.", 12f, P.muted)
+                  val note = tv(this, "Nhấn giữ một hàng để sao chép link. Nhấn giữ bong bóng để mở thẳng bằng trình xem ngoài. Video có DRM hoặc DASH không tải được; chỉ tải nội dung bạn có quyền sử dụng.", 12f, P.muted)
                   val np = lp(MATCH, WRAP); np.topMargin = dp(12)
                   panel.addView(note, np)
                   pushOverlay(f)
+              }
+
+              /** Mở thẳng bằng trình xem video khác (MX Player, VLC...), không cần phát trước. */
+              private fun openExternalVideo(m: MediaItem, t: Tab) {
+                  try {
+                      val ua = t.web?.settings?.userAgentString ?: ""
+                      val i = Intent(Intent.ACTION_VIEW)
+                      i.setDataAndType(Uri.parse(m.url), if (m.type == "HLS") "application/x-mpegURL" else "video/*")
+                      i.putExtra("title", t.title)
+                      val hd = ArrayList<String>()
+                      if (ua.isNotEmpty()) { hd.add("User-Agent"); hd.add(ua) }
+                      if (!m.referer.isNullOrEmpty()) { hd.add("Referer"); hd.add(m.referer) }
+                      if (hd.isNotEmpty()) i.putExtra("headers", hd.toTypedArray())
+                      val ch = Intent.createChooser(i, "Mở video bằng")
+                      ch.putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(ComponentName(this, MainActivity::class.java), ComponentName(this, PlayerActivity::class.java)))
+                      startActivity(ch)
+                  } catch (e: Exception) { toast("Không có app xem video phù hợp") }
+              }
+
+              /** Chạm/nhấn giữ bong bóng: mở thẳng ngoài nếu chỉ có 1 video, nhiều video thì hiện danh sách. */
+              private fun bubbleDirect() {
+                  val t = tabs[cur]
+                  if (t.media.size == 1) openExternalVideo(t.media[0], t) else openMedia()
+              }
+
+              private var bubbleLong = false
+              private val longRun = Runnable {
+                  bubbleLong = true
+                  bubble.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                  if (Store.flag(this, "bubbleExt", false)) openMedia() else bubbleDirect()
               }
 
               private fun playUrl(m: MediaItem, t: Tab, ua: String) {
@@ -3178,13 +3231,16 @@ jobs:
                   val wb = btn(this, "Hình nền trang chủ", P.surface, P.text, P.line) { openWallpaper() }
                   val wbp = lp(MATCH, WRAP); wbp.topMargin = dp(8); wbp.bottomMargin = dp(8)
                   body.addView(wb, wbp)
-                  sSw(body, "Hiệu ứng 3D", "Bong bóng video xoay nghiêng 3D. Tắt nếu máy chậm.", fx3d) { Store.setFx3d(this, it); fx3d = it }
+                  sSw(body, "Hiệu ứng động", "Bong bóng video nhấp nhô nhẹ. Tắt nếu máy chậm.", fx3d) { Store.setFx3d(this, it); fx3d = it }
 
               }
 
               private fun settingsGeneral() = settingsPage("Chung") { body ->
                   sSec(body, "Công cụ tìm kiếm")
                   sSeg(body, listOf("Google", "Bing", "DuckDuckGo"), Store.engine(this)) { Store.setEngine(this, it) }
+
+                  sSec(body, "Bong bóng video")
+                  sSw(body, "Chạm bong bóng mở thẳng trình xem ngoài", "Bật: chạm = mở bằng MX Player, VLC... ngay (nhiều video thì hiện danh sách); nhấn giữ = mở danh sách. Tắt: ngược lại.", Store.flag(this, "bubbleExt", false)) { Store.setFlag(this, "bubbleExt", it) }
 
                   sSec(body, "Trình duyệt mặc định")
                   body.addView(tv(this, "Đặt Trình Duyệt làm trình duyệt mặc định để mở link từ các app khác. Hoặc chọn Trình Duyệt trong menu Chia sẻ của app bất kỳ.", 12f, P.muted))
@@ -4301,60 +4357,61 @@ jobs:
               }
           }
 
-          /** Bong bóng nổi kiểu 3D: nền cầu có bóng, vệt sáng, nghiêng xoay nhẹ */
+          /** Bong bóng bắt link: viên thuốc kính tối, nút phát xanh và chữ "N video" */
           class Bubble(ctx: Context) : View(ctx) {
               var count = 0
-                  set(v) { field = v; invalidate() }
+                  set(v) { field = v; requestLayout(); invalidate() }
               private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val u = ctx.dp(1).toFloat()
 
               init {
+                  p.textSize = 14f * u
+                  p.typeface = Typeface.DEFAULT_BOLD
                   outlineProvider = object : ViewOutlineProvider() {
                       override fun getOutline(v: View, o: Outline) {
-                          val ins = context.dp(8)
-                          o.setOval(ins, ins, v.width - ins, v.height - ins)
+                          val ins = context.dp(6)
+                          o.setRoundRect(ins, ins, v.width - ins, v.height - ins, (v.height - 2 * ins) / 2f)
                       }
                   }
-                  elevation = context.dp(12).toFloat()
-                  cameraDistance = 12000f * resources.displayMetrics.density
+                  elevation = context.dp(10).toFloat()
+              }
+
+              private fun label() = "$count video"
+
+              override fun onMeasure(wSpec: Int, hSpec: Int) {
+                  val w = (12f * u + 6f * u + 36f * u + 10f * u + p.measureText(label()) + 16f * u).toInt()
+                  setMeasuredDimension(w, context.dp(60))
               }
 
               override fun onDraw(c: Canvas) {
-                  val w = width.toFloat()
-                  val cx = w / 2f
-                  val cy = height / 2f
-                  val r = w / 2f - context.dp(8)
+                  val ins = 6f * u
+                  val l = ins
+                  val t = ins
+                  val r = width - ins
+                  val b = height - ins
+                  val h = b - t
+                  val rect = RectF(l, t, r, b)
                   p.style = Paint.Style.FILL
-                  p.shader = RadialGradient(cx - r * 0.3f, cy - r * 0.4f, r * 1.5f,
-                      intArrayOf(0xFFB8E3FF.toInt(), 0xFF5BB4F5.toInt(), 0xFF2677BA.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-                  c.drawCircle(cx, cy, r, p)
-                  p.shader = null
-                  p.color = 0x55FFFFFF
-                  c.drawOval(RectF(cx - r * 0.6f, cy - r * 0.9f, cx + r * 0.45f, cy - r * 0.3f), p)
+                  p.color = 0xEB132334.toInt()
+                  c.drawRoundRect(rect, h / 2f, h / 2f, p)
                   p.style = Paint.Style.STROKE
-                  p.strokeWidth = r * 0.1f
-                  p.color = 0x33000000
-                  c.drawCircle(cx, cy, r - p.strokeWidth / 2, p)
+                  p.strokeWidth = u
+                  p.color = 0x29FFFFFF
+                  c.drawRoundRect(rect, h / 2f, h / 2f, p)
                   p.style = Paint.Style.FILL
+                  val cr = 18f * u
+                  val cx = l + 6f * u + cr
+                  val cy = (t + b) / 2f
+                  p.color = 0xFF5BB4F5.toInt()
+                  c.drawCircle(cx, cy, cr, p)
                   val tri = Path()
-                  tri.moveTo(cx - r * 0.25f, cy - r * 0.4f); tri.lineTo(cx - r * 0.25f, cy + r * 0.4f); tri.lineTo(cx + r * 0.42f, cy)
+                  tri.moveTo(cx - 4f * u, cy - 7f * u); tri.lineTo(cx - 4f * u, cy + 7f * u); tri.lineTo(cx + 7f * u, cy)
                   tri.close()
-                  c.save(); c.translate(0f, r * 0.06f)
-                  p.color = 0x55000000
+                  p.color = 0xFF06223A.toInt()
                   c.drawPath(tri, p)
-                  c.restore()
                   p.color = Color.WHITE
-                  c.drawPath(tri, p)
-                  // huy hiệu số lượng
-                  val bx = cx + r * 0.78f
-                  val by = cy - r * 0.78f
-                  val br = context.dp(11).toFloat()
-                  p.color = Color.WHITE
-                  c.drawCircle(bx, by, br, p)
-                  p.color = Color.parseColor("#0B4F85")
-                  p.textSize = br * 1.15f
-                  p.textAlign = Paint.Align.CENTER
-                  p.typeface = Typeface.DEFAULT_BOLD
-                  c.drawText(count.toString(), bx, by + br * 0.4f, p)
+                  p.textAlign = Paint.Align.LEFT
+                  c.drawText(label(), cx + cr + 10f * u, cy - (p.ascent() + p.descent()) / 2f, p)
               }
           }
           AMLICH_EOF
